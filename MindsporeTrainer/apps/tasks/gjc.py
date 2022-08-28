@@ -18,7 +18,8 @@ from MindsporeTrainer.utils.metrics import BertMetric, MSAucuracy
 from MindsporeTrainer.utils.masker import NGramMaskGenerator
 from MindsporeTrainer.data.dynamic_dataset import create_dynamic_dataset
 from MindsporeTrainer.modeling.tokenizers import BertTokenizer
-from ..models.classify import BertForClassify, ClsLoss, ClsEvalHead
+from MindsporeTrainer.modeling.layers import ClsEvalHead
+from ..models.classify import BertForClassify, ClsLoss
 
 @register_task(name="GJC", desc="GJC task")
 class GJCTask(Task):

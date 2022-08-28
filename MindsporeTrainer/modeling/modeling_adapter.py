@@ -85,35 +85,22 @@ class NetworkWithLoss(nn.Cell):
         super(NetworkWithLoss, self).__init__()
         self.backbone = backbone
         self.loss_fn = loss_fn
+        if loss_fn.construct.__code__.co_argcount == 3:
+            self.use_simple_loss = True
+        else:
+            self.use_simple_loss = False
         self.fp16 = fp16
-        # if fp16:
-        #     self.cast = F.mixed_precision_cast
-        # else:
-
         self.return_all = return_all
 
     def construct(self, *sample):
         """Get pre-training loss"""
-        # sample = args[0:-1]
-        # label = args[-1]
-        # start = time.time()
         prediction_scores = self.backbone(*sample)
-        # print(time.time() - start)
-        # if self.fp16:
-        #     label = self.cast(mstype.float32, label)
-        #     prediction_scores = self.cast(mstype.float32, prediction_scores)
-        # else:
-        # label = self.cast(label, mstype.float32)
-        # prediction_scores = F.cast(prediction_scores, mstype.float32)
-
-        total_loss = self.loss_fn(*(sample + prediction_scores))
-        # if self.fp16:
-        #     total_loss = self.cast(mstype.float32, total_loss)
-        # else:
+        if self.use_simple_loss:
+            total_loss = self.loss_fn(*(prediction_scores + (sample[1],)))
+        else:
+            total_loss = self.loss_fn(*(sample + prediction_scores))
         total_loss = F.cast(total_loss, mstype.float32)
         return total_loss
-
-        # return {'loss': self.cast(total_loss, mstype.float32), 'logits': prediction_scores, 'label': label}
 
 
 class ModelForEval(nn.Cell):
@@ -126,15 +113,11 @@ class ModelForEval(nn.Cell):
         self.backbone = network.backbone
         if eval_head is None:
             self.eval_head = network.loss_fn
-        # self.argmax = ms.ops.Argmax(axis=-1, output_type=mstype.int32)
-        # self.equal = ms.ops.Equal()
-        # self.sum = ms.ops.ReduceSum()
-        # self.reshape = ms.ops.Reshape()
-        # self.shape = ms.ops.Shape()
+        if eval_head.construct.__code__.co_argcount == 3:
+            self.use_simple_eval = True
+        else:
+            self.use_simple_eval = False
         self.fp16 = fp16
-        # if fp16:
-        #     self.cast = F.mixed_precision_cast
-        # else:
         self.cast = ms.ops.Cast()
         self.reduce_flag = False
         parallel_mode = context.get_auto_parallel_context("parallel_mode")
@@ -148,13 +131,10 @@ class ModelForEval(nn.Cell):
     def construct(self, *sample):
         """Calculate prediction scores"""
         pred_scores = self.backbone(*sample)
-        # if self.fp16:
-        #     label = self.cast(mstype.float32, label)
-        #     pred_scores = self.cast(mstype.float32, pred_scores)
-        # else:
-        # label = self.cast(label, mstype.float32)
-        # pred_scores = F.cast(pred_scores, mstype.float32)
-        output = self.eval_head(*(sample + pred_scores))
+        if self.use_simple_eval:
+            output = self.eval_head(*(pred_scores + (sample[1],)))
+        else:
+            output = self.eval_head(*(sample + pred_scores))
         out = []
         for m in output:
             if m.ndim == 0:
@@ -528,17 +508,17 @@ class TrainAccumulationAllReducePostWithLossScaleCell(nn.Cell):
         self.overflow_reducer = F.identity
         if self.is_distributed:
             self.overflow_reducer = P.AllReduce()
-        # self.cast = P.Cast()
+        self.cast = P.Cast()
         self.alloc_status = P.NPUAllocFloatStatus()
         self.get_status = P.NPUGetFloatStatus()
         self.clear_status = P.NPUClearFloatStatus()
         self.reduce_sum = P.ReduceSum(keep_dims=False)
         self.base = Tensor(1, mstype.float32)
-        # self.less_equal = P.LessEqual()
-        # self.logical_or = P.LogicalOr()
-        # self.not_equal = P.NotEqual()
-        # self.select = P.Select()
-        # self.reshape = P.Reshape()
+        self.less_equal = P.LessEqual()
+        self.logical_or = P.LogicalOr()
+        self.not_equal = P.NotEqual()
+        self.select = P.Select()
+        self.reshape = P.Reshape()
         self.hyper_map = C.HyperMap()
         self.loss_scale = None
         self.loss_scaling_manager = scale_update_cell
@@ -563,8 +543,8 @@ class TrainAccumulationAllReducePostWithLossScaleCell(nn.Cell):
         # loss = loss[0]
         if self.use_loss_scale:
             scaling_sens = self.loss_scale
-            scaling_sens = C.ones_like(loss) * F.cast(scaling_sens, F.dtype(loss))
-            scaling_sens = F.cast(scaling_sens, mstype.float32)
+            scaling_sens = C.ones_like(loss) * self.cast(scaling_sens, F.dtype(loss))
+            scaling_sens = self.cast(scaling_sens, mstype.float32)
         else:
             scaling_sens = self.one
 
@@ -579,11 +559,11 @@ class TrainAccumulationAllReducePostWithLossScaleCell(nn.Cell):
             init = (False)
 
         # update accumulation parameters
-        is_accu_step = F.not_equal(self.local_step, self.accumulation_steps)
-        self.local_step = F.select(is_accu_step, self.local_step + self.one, self.one)
-        self.accu_loss = F.select(is_accu_step, self.accu_loss + loss, loss.view((1,)))
+        is_accu_step = self.not_equal(self.local_step, self.accumulation_steps)
+        self.local_step = self.select(is_accu_step, self.local_step + self.one, self.one)
+        self.accu_loss = self.select(is_accu_step, self.accu_loss + loss, loss.view((1,)))
         mean_loss = self.accu_loss / self.local_step
-        is_accu_step = F.not_equal(self.local_step, self.accumulation_steps)
+        is_accu_step = self.not_equal(self.local_step, self.accumulation_steps)
 
         grads_fn = self.grad(self.network, weights)
         grads = grads_fn(*args, scaling_sens)
@@ -595,21 +575,21 @@ class TrainAccumulationAllReducePostWithLossScaleCell(nn.Cell):
             get_status = self.get_status(init)
             init = F.depend(init, get_status)
             flag_sum = self.reduce_sum(init, (0,))
-            overflow = F.less_equal(self.base, flag_sum)
+            overflow = self.less_equal(self.base, flag_sum)
         else:
-            flag_sum = self.hyper_map(F.partial(_grad_overflow), mean_loss)
+            flag_sum = self.hyper_map(self.partial(_grad_overflow), mean_loss)
             flag_sum = P.AddN()(flag_sum)
             # convert flag_sum to scalar
             flag_sum = P.Reshape()(flag_sum, (()))
             if self.is_distributed:
                 flag_reduce = self.allreduce(flag_sum)
-                overflow = F.less_equal(self.base, flag_reduce)
+                overflow = self.less_equal(self.base, flag_reduce)
             else:
-                overflow = F.less_equal(self.base, flag_sum)
+                overflow = self.less_equal(self.base, flag_sum)
         
-        overflow = F.logical_or(F.not_equal(self.accu_overflow, self.zero), overflow)
-        accu_overflow = F.select(overflow, self.one, self.zero)
-        self.accu_overflow = F.select(is_accu_step, accu_overflow, self.zero)
+        overflow = self.logical_or(self.not_equal(self.accu_overflow, self.zero), overflow)
+        accu_overflow = self.select(overflow, self.one, self.zero)
+        self.accu_overflow = self.select(is_accu_step, accu_overflow, self.zero)
 
         if is_accu_step:
             # apply grad reducer on grads
@@ -622,10 +602,10 @@ class TrainAccumulationAllReducePostWithLossScaleCell(nn.Cell):
             #     grads = self.hyper_map(F.partial(clip_grad, GRADIENT_CLIP_TYPE, GRADIENT_CLIP_VALUE), grads)
             accu_overflow = F.depend(accu_overflow, grads)
             accu_overflow = self.overflow_reducer(accu_overflow)
-            overflow = F.less_equal(self.base, accu_overflow)
+            overflow = self.less_equal(self.base, accu_overflow)
             accu_succ = self.hyper_map(reset_accu_grads, self.accu_grads)
             overflow = F.depend(overflow, accu_succ)
-            overflow = F.reshape(overflow, (()))
+            overflow = self.reshape(overflow, (()))
             # if sens is None:
             if self.use_loss_scale:
                 overflow = self.loss_scaling_manager(self.loss_scale, overflow)

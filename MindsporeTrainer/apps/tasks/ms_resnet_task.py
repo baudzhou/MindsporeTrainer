@@ -12,7 +12,7 @@ from MindsporeTrainer.apps.tasks.task import Task
 from MindsporeTrainer.apps.tasks.task_registry import register_task
 from MindsporeTrainer.utils.metrics import *
 
-@register_task(name="RESNETTask", desc="a task demo for resnet on cifar10")
+@register_task(name="RESNET", desc="a task demo for resnet on cifar10")
 class RESNETTask(Task):
     def __init__(self, args, **kwargs):
         super().__init__(args, **kwargs)
@@ -33,11 +33,7 @@ class RESNETTask(Task):
 
     def get_metrics(self, **kwargs):
         """Calcuate metrics based on prediction results"""
-        def metrics_fn(logits=None, labels=None, predicts=None):
-            return OrderedDict(
-                                accuracy = metric_accuracy(logits=logits, labels=labels, predicts=predicts),
-                                )
-        return metrics_fn
+        return {'acc': MSAucuracy()}
 
     def get_eval_fn(self, **kwargs):
         '''
@@ -66,9 +62,6 @@ class RESNETTask(Task):
         rescale = 1.0 / 255.0
         shift = 0.0
 
-        # get rank_id and rank_size
-        rank_id = get_rank()
-        rank_size = get_group_size()
         data_set = ds.Cifar10Dataset(self.data_dir, usage=usage, num_shards=rank_size, shard_id=rank_id, num_parallel_workers=4)
 
         # define map operations
@@ -98,22 +91,23 @@ class RESNETTask(Task):
 
         return data_set
 
-    def get_model_class_fn(self):
+    def get_model(self):
         '''
         build the model
         '''
         from MindsporeTrainer.apps.models.resnet import ResidualBlock, ResNet
-        def partial_class(*wargs, **kwargs):
-            return ResNet(ResidualBlock, len(self.get_labels()))
-        return partial_class
 
+        return ResNet(ResidualBlock, len(self.get_labels()))
 
-    def get_loss_fn(self, *args, **kwargs):
+    def get_loss(self, *args, **kwargs):
         '''
         apply cross entropy loss
         '''
         return SoftmaxCrossEntropyWithLogits(sparse=True, reduction='mean')
 
+    def get_eval_head(self, *args, **kwargs):
+        from MindsporeTrainer.modeling.layers import ClsEvalHead
+        return ClsEvalHead(len(self.get_labels()))
 
     def get_opt_fn(self, *args, **kwargs):
         '''

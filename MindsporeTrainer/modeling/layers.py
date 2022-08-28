@@ -1226,6 +1226,24 @@ class GetNextSentenceOutput(nn.Cell):
         return log_prob
 
 
+class FakeHead(nn.Cell):
+    """
+    A fake head which return the last arg
+
+    Args:
+        None
+
+    Returns:
+        Tensor, last arg.
+    """
+
+    def __init__(self):
+        super(FakeHead, self).__init__()
+
+    def construct(self, *input):
+        return input[-1]
+
+
 class EnhancedMaskDecoder(nn.Cell):
   def __init__(self, **kwargs):
     super().__init__()
@@ -1295,6 +1313,114 @@ class EnhancedMaskDecoder(nn.Cell):
       outputs = [encoder_layers[-1]]
     
     return outputs
+
+
+class BertEvalHead(nn.Cell):
+    """
+    Provide bert pre-training evaluation head.
+
+    Args:
+        config (BertConfig): The config of BertModel.
+
+    Returns:
+        tuple: Tensor, total loss. Tensor, ppl
+    """
+
+    def __init__(self, vocab_size):
+        super(BertEvalHead, self).__init__()
+        self.vocab_size = vocab_size
+        self.onehot = P.OneHot()
+        self.on_value = Tensor(1.0, mstype.float32)
+        self.off_value = Tensor(0.0, mstype.float32)
+        self.reduce_sum = P.ReduceSum()
+        self.reduce_mean = P.ReduceMean()
+        self.reshape = P.Reshape()
+        self.last_idx = (-1,)
+        self.neg = P.Neg()
+        self.cast = P.Cast()
+        self.argmax = P.Argmax()
+
+    def construct(self, *sample):
+        """Defines the computation performed.
+            sample: ["input_ids", "input_mask", "token_type_id", "next_sentence_labels",
+                     "masked_lm_positions", "masked_lm_ids", "masked_lm_weights"] + 
+                    [prediction_scores, seq_relationship_score]
+        """
+        input_ids = sample[0]
+        input_mask = sample[1]
+        token_type_id = sample[2]
+        masked_lm_positions = sample[4]
+        masked_lm_ids = sample[5]
+        masked_lm_weights = sample[6]
+        prediction_scores = sample[7]
+        next_sentence_labels = sample[3]
+        seq_relationship_score = sample[8]
+        label_ids = self.reshape(masked_lm_ids, self.last_idx)
+        label_weights = self.cast(self.reshape(masked_lm_weights, self.last_idx), mstype.float32)
+        one_hot_labels = self.onehot(label_ids, self.vocab_size, self.on_value, self.off_value)
+
+        per_example_loss = self.neg(self.reduce_sum(prediction_scores * one_hot_labels, self.last_idx))
+        numerator = self.reduce_sum(label_weights * per_example_loss, ())
+        denominator = self.reduce_sum(label_weights, ()) + self.cast(F.tuple_to_array((1e-5,)), mstype.float32)
+        masked_lm_loss = numerator / denominator
+
+        # next_sentence_loss
+        labels = self.reshape(next_sentence_labels, self.last_idx)
+        if labels.max() >= 0:
+            one_hot_labels = self.onehot(labels, 2, self.on_value, self.off_value)
+            per_example_loss = self.neg(self.reduce_sum(
+                one_hot_labels * seq_relationship_score, self.last_idx))
+            next_sentence_loss = self.reduce_mean(per_example_loss, self.last_idx)
+        else:
+            next_sentence_loss = 0
+
+        # total_loss
+        total_loss = masked_lm_loss + next_sentence_loss
+
+        bs, _ = F.shape(input_ids)
+
+        index = self.argmax(prediction_scores)
+        index = self.reshape(index, (bs, -1))
+        eval_acc = F.equal(index, masked_lm_ids)
+        eval_acc = self.cast(eval_acc, mstype.float32)
+        real_acc = eval_acc * masked_lm_weights
+        acc = real_acc.sum()
+        total = masked_lm_weights.astype(mstype.float32).sum()
+
+        return total_loss, acc, total, prediction_scores, masked_lm_ids
+
+
+class ClsEvalHead(nn.Cell):
+    """
+    Provide bert pre-training evaluation head.
+
+    Args:
+        config (BertConfig): The config of BertModel.
+
+    Returns:
+        tuple: Tensor, total loss. Tensor, ppl
+    """
+
+    def __init__(self, num_labels, return_all=False, fp16=False, dropout=0.1):
+        super(ClsEvalHead, self).__init__()
+        self.onehot = P.OneHot()
+        self.on_value = Tensor(1.0, mstype.float32)
+        self.off_value = Tensor(0.0, mstype.float32)
+        self.reduce_sum = P.ReduceSum()
+        self.reduce_mean = P.ReduceMean()
+        self.reshape = P.Reshape()
+        self.last_idx = (-1,)
+        self.neg = P.Neg()
+        self.cast = P.Cast()
+        self.argmax = P.Argmax()
+        self.loss_fn = nn.SoftmaxCrossEntropyWithLogits(sparse=True, reduction='mean')
+
+    def construct(self, logits, labels):
+        """Defines the computation performed.
+        """
+        loss = self.loss_fn(logits, labels)
+        preds = logits.argmax(-1)
+        return (loss, preds, labels)
 
 
 def make_log_bucket_position(relative_pos, bucket_size, max_position):

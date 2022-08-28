@@ -204,7 +204,7 @@ class DistributedTrainer:
                 self.args.num_train_epochs = self.args.train_steps // self.train_data.get_dataset_size() + 1
             self.args.train_steps = int(self.args.train_steps)
             self.args.num_train_epochs = int(self.args.num_train_epochs)
-            self.args.save_checkpoint_steps = int(self.args.save_checkpoint_steps / self.args.device_num)
+            self.args.save_eval_steps = int(self.args.save_eval_steps / self.args.device_num)
 
     def init_task(self):
         label_list = self.task.get_labels()
@@ -248,7 +248,7 @@ class DistributedTrainer:
             load_ckpt(self.model, self.args.load_checkpoint_path)
         if self.args.do_eval:
             metrics = self.task.get_metrics()
-            self.eval_data = self.task.eval_data(max_seq_len=self.args.max_seq_length, batch_size=self.args.eval_batch_size)
+            self.eval_data = self.task.eval_data()
             if metrics is None:
                 metrics = {'acc': MSAucuracy()}
         else:
@@ -259,7 +259,7 @@ class DistributedTrainer:
             self.optimizer, opt_overflow = self.optimizer_fn(self.args, self.model, opt_name=self.task.optimizer_name)
 
             if self.args.enable_save_ckpt == "true" and self.args.rank % min(8, self.args.device_num) == 0:
-                    config_ck = CheckpointConfig(save_checkpoint_steps=self.args.save_checkpoint_steps,
+                    config_ck = CheckpointConfig(save_checkpoint_steps=self.args.save_eval_steps,
                                                 keep_checkpoint_max=self.args.save_checkpoint_num)
                     ckpoint_cb = ModelCheckpointWithBest(self.trainer_state, prefix=self.args.task_name,
                                                         directory=self.args.output_dir, config=config_ck)
@@ -282,8 +282,8 @@ class DistributedTrainer:
 
             summary_dir = os.path.join(self.output_dir, 'tblogger', str(self.args.rank))
             callbacks.append(StateCallback(self.trainer_state, self.optimizer, 
-                                                                            report_steps=self.args.report_interval,
-                                                                            summary_dir=summary_dir, train_steps=self.args.train_steps))
+                                           report_steps=self.args.report_interval,
+                                           summary_dir=summary_dir, train_steps=self.args.train_steps))
             if self.args.do_eval:
                 self.eval_model = ModelForEval(self.model, self.eval_head, fp16=self.args.fp16)
 
@@ -296,9 +296,9 @@ class DistributedTrainer:
                 eval_fn = self.task.get_eval_fn(data=self.eval_data, output_dir=self.args.output_dir, rank=self.args.rank)
                 if eval_fn is None:
                     eval_fn = get_eval_fn(self.task, self.eval_data, self.args.output_dir, 
-                                                                rank=self.args.rank, main_metric=main_metric)
+                                          rank=self.args.rank, main_metric=main_metric)
                 eval_callback = EvalCallBack(model, self.trainer_state, self.eval_data, 0, eval_fn, self.args.train_steps,
-                                                                            eval_steps=self.args.save_checkpoint_steps, rank=self.args.local_rank)
+                                             eval_steps=self.args.save_eval_steps, rank=self.args.local_rank)
                 callbacks = [eval_callback] + callbacks
 
             model.train(self.args.num_train_epochs, 
@@ -327,7 +327,7 @@ class DistributedTrainer:
             eval_fn = self.task.get_eval_fn(data=self.eval_data, output_dir=self.args.output_dir, rank=self.args.local_rank)
             if eval_fn is None:
                 eval_fn = get_eval_fn(self.task, self.eval_data, self.args.output_dir, 
-                                                            rank=self.args.local_rank, main_metric=main_metric)
+                                      rank=self.args.local_rank, main_metric=main_metric)
             eval_fn(model, 'eval', 'final')
 
     def _setup_model(self):
