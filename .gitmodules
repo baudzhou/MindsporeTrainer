@@ -1,0 +1,3 @@
+[submodule "MindsporeTrainer/modeling/model_zoo"]
+	path = MindsporeTrainer/modeling/model_zoo
+	url = https://gitee.com/mindspore/models
