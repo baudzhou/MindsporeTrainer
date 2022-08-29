@@ -41,5 +41,5 @@ jobs:
       if: startsWith(github.ref, 'refs/tags')
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
-        user: zhoubo@pypi
-        password: ${{ 90e7d447-b3dd-488d-9f0d-dd05a2831b63 }}
+        user: ${{ secret.PYPI_USER }}
+        password: ${{ secret.PYPI_PASSWORD }}
