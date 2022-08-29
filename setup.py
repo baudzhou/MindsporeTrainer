@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 from setuptools import setup
 from setuptools import find_packages
-
-with open("README.md", "r") as fh:
-    long_description = fh.read()
+from pathlib import Path
+this_directory = Path(__file__).parent
+long_description = (this_directory / "README.md").read_text(encoding='utf-8')
 
 setup(name='MindsporeTrainer',
       version='0.1.0',
       description='Make Mindspore Training Easier',
       long_description=long_description,
+      long_description_content_type='text/markdown',
       author='Zhou, Bo',
       author_email='baudzhou@outlook.com',
       url='https://github.com/baudzhou/MindsporeTrainer',
