@@ -1,6 +1,6 @@
-# MindsporeTrainer
+# MindsporeTrainer 让Mindspore的算法研究更容易一些。
 基于昇思MindSpore的训练框架。  
-MindSpore发展到现在，已经取得很大的进步，然而还有不少的不足。个人感觉，其设计思想偏向于工程项目人员，对研究人员来说，有很多不便之处。在学习、探索的过程中，作者开发了MindsporeTrainer，以便于研究人员在算法开发过程中快速调整实验、定义任务。  
+Mindspore上手不易，希望能帮助各位炼丹师的升级之路更容易些。
 主要的几个出发点是：  
 1.	采用纯python实现，方便多卡训练过程中的调试
 2.	易于扩展，对新任务采用插件式接入
@@ -17,7 +17,7 @@ MindSpore发展到现在，已经取得很大的进步，然而还有不少的�
 `pip install MindsporeTrainer`
 ## 源码
 `python setup.py`
-# 使用方法
+# 使用方法（以作者复现的DeBERTa为例）
 ## 1. 定义task
 ```
 [代码](MindsporeTrainer/apps/tasks/deberta.py)
@@ -176,7 +176,8 @@ python run.py --task_name=RESNETTask --do_train --do_eval --data_dir=data --num_
 ```
 # 模型创建
 ## 自定义模型
-Mindspore相对TF和PyTorch，有其自身的特点，建模习惯也不同。在本框架中，为了便于模块化与代码复用，将模型分为**backbone**和**predict head**两部分。
+Mindspore相对TF和PyTorch，有其自身的特点，建模习惯也不同。在本框架中，为了便于模块化与代码复用，将模型分为**backbone**和**predict head**两部分。  
+需要注意的是，模型定义中，construct函数返回都应当是tuple，即使只有一个对象返回，也应当采用(obj,)的形式。
 ### backbone
 模型的主体部分定义。
 ### predict head
