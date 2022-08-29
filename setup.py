@@ -27,7 +27,7 @@ GitHub: https://github.com/baudzhou/MindsporeTrainer
 """
 
 setup(name='MindsporeTrainer',
-      version='0.1',
+      version='0.1.0',
       description='Make Mindspore Training Easier',
       long_description=LONGDOC,
       author='Zhou, Bo',
