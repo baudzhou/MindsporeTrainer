@@ -1,17 +1,18 @@
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 #
-# WYWEB Authors
-# 
-#
+# zbo@zju.edu.cn
+# 2022-08-08
+# ============================================================================
 
 import os
 import csv
-import copy
 from collections import OrderedDict
 import numpy as np
-from loguru import logger
 from utils.metrics import *
-from mindspore.dataset import Dataset
 from mindspore.communication import get_rank, get_group_size
+
+from MindsporeTrainer.modeling.layers import FakeHead
 
 
 __all__ = ['EvalData', 'Task', 'TransformerTask']
@@ -74,7 +75,7 @@ class Task():
 
     def get_labels(self):
         """Gets the list of labels for this data set."""
-        raise NotImplementedError()
+        return None
 
     def label2id(self, labelstr):
         label_dict = {l:i for i,l in enumerate(self.get_labels())}
@@ -93,7 +94,7 @@ class Task():
         """
         Get the evaluate head, the head replace loss function head when evaluation process
         """
-        return None
+        return FakeHead()
 
     def get_pred_fn(self, *args, **kwargs):
         """
@@ -117,7 +118,7 @@ class Task():
 
     def get_metrics(self):
         """Calcuate metrics based on prediction results"""
-        return OrderedDict(accuracy= metric_accuracy(logits, labels))
+        return None
 
     def get_predict_fn(self):
         """Calcuate metrics based on prediction results"""
@@ -180,9 +181,10 @@ class Task():
 
 class TransformerTask(Task):
     _meta={}
-    max_seq_length = 512
+    max_seq_len = 512
     model_config = ''
     vocab_type = ''
     vocab_path = ''
     def __init__(self, args, **kwargs):
         self.args = args
+        super().__init__(args, **kwargs)

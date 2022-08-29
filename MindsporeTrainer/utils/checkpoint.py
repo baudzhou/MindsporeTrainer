@@ -1,5 +1,9 @@
-#!/usr/bin/env python3
-# -*- coding:utf-8 -*-
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+#
+# zbo@zju.edu.cn
+# 2022-08-08
+# ============================================================================
 
 import os
 from pyexpat import model

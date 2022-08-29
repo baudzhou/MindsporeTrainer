@@ -4,4 +4,6 @@
 # zbo@zju.edu.cn
 # 2022-08-08
 # ============================================================================
-from .resnet import *
+
+from .task import Task, TransformerTask, EvalData
+from .task_registry import register_task, load_tasks, get_task

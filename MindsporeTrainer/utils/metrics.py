@@ -1,3 +1,10 @@
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+#
+# zbo@zju.edu.cn
+# 2022-08-08
+# ============================================================================
+
 import numpy as np
 import math
 from sklearn.metrics import matthews_corrcoef
@@ -128,7 +135,7 @@ class MSAucuracy(Accuracy):
       y_pred = self._convert_data(inputs[0])
       y = self._convert_data(inputs[1])
       if self._type == 'classification' and y_pred.ndim != y.ndim:
-          y = y.argmax(axis=1)
+          y_pred = y_pred.argmax(axis=1)
       # self._check_shape(y_pred, y)
       # self._check_value(y_pred, y)
 

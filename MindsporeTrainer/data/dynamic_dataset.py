@@ -1,11 +1,9 @@
-
-#
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 #
-# WYWEB Authors
-# 
-#
+# zbo@zju.edu.cn
+# 2022-08-08
+# ============================================================================
 
 import random
 import mmap
@@ -42,10 +40,6 @@ def create_dynamic_dataset(examples, feature_fn, batch_size, output_columns, col
     type_cast_op = C.c_transforms.TypeCast(mstype.int32)
     for col in output_columns:
         dataset = dataset.map(operations=type_cast_op, input_columns=col)
-    # dataset = dataset.map(operations=type_cast_op, input_columns="token_type_id")
-    # dataset = dataset.map(operations=type_cast_op, input_columns="input_mask")
-    # dataset = dataset.map(operations=type_cast_op, input_columns="input_ids")
-    # dataset = dataset.shuffle(buffer_size=buffer_size)
     dataset = dataset.batch(batch_size=batch_size, drop_remainder=True)
     print_example(dataset)
     return dataset

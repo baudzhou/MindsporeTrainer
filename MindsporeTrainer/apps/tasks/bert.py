@@ -1,3 +1,9 @@
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+#
+# zbo@zju.edu.cn
+# 2022-08-08
+# ============================================================================
 
 from collections import OrderedDict
 
@@ -12,10 +18,10 @@ from shutil import copyfile
 
 from loguru import logger
 
-from data import ExampleInstance, ExampleSet, _truncate_segments
-from data.example import *
-from MindsporeTrainer.apps.tasks.task import EvalData, Task
-from MindsporeTrainer.apps.tasks.task_registry import register_task
+from MindsporeTrainer.data import ExampleInstance, ExampleSet, _truncate_segments
+from MindsporeTrainer.data.example import *
+from MindsporeTrainer.task import EvalData, Task
+from MindsporeTrainer.task  import register_task
 from utils.metrics import *
 
 import mindspore.nn as nn

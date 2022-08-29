@@ -1,18 +1,10 @@
-# Copyright 2020 Huawei Technologies Co., Ltd
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# zbo@zju.edu.cn
+# 2022-08-08
 # ============================================================================
-"""Bert model."""
+
 
 import math
 import copy
@@ -232,82 +224,6 @@ class BertPreTraining(nn.Cell):
         seq_relationship_score = self.cls2(pooled_output)
         return prediction_scores, seq_relationship_score
 
-
-
-class BertEvalHead(nn.Cell):
-    """
-    Provide bert pre-training evaluation head.
-
-    Args:
-        config (BertConfig): The config of BertModel.
-
-    Returns:
-        tuple: Tensor, total loss. Tensor, ppl
-    """
-
-    def __init__(self, vocab_size):
-        super(BertEvalHead, self).__init__()
-        self.vocab_size = vocab_size
-        self.onehot = P.OneHot()
-        self.on_value = Tensor(1.0, mstype.float32)
-        self.off_value = Tensor(0.0, mstype.float32)
-        self.reduce_sum = P.ReduceSum()
-        self.reduce_mean = P.ReduceMean()
-        self.reshape = P.Reshape()
-        self.last_idx = (-1,)
-        self.neg = P.Neg()
-        self.cast = P.Cast()
-        self.argmax = P.Argmax()
-
-    def construct(self, *sample):
-        """Defines the computation performed.
-            sample: ["input_ids", "input_mask", "token_type_id", "next_sentence_labels",
-                     "masked_lm_positions", "masked_lm_ids", "masked_lm_weights"] + 
-                    [prediction_scores, seq_relationship_score]
-        """
-        input_ids = sample[0]
-        input_mask = sample[1]
-        token_type_id = sample[2]
-        masked_lm_positions = sample[4]
-        masked_lm_ids = sample[5]
-        masked_lm_weights = sample[6]
-        prediction_scores = sample[7]
-        next_sentence_labels = sample[3]
-        seq_relationship_score = sample[8]
-        label_ids = self.reshape(masked_lm_ids, self.last_idx)
-        label_weights = self.cast(self.reshape(masked_lm_weights, self.last_idx), mstype.float32)
-        one_hot_labels = self.onehot(label_ids, self.vocab_size, self.on_value, self.off_value)
-
-        per_example_loss = self.neg(self.reduce_sum(prediction_scores * one_hot_labels, self.last_idx))
-        numerator = self.reduce_sum(label_weights * per_example_loss, ())
-        denominator = self.reduce_sum(label_weights, ()) + self.cast(F.tuple_to_array((1e-5,)), mstype.float32)
-        masked_lm_loss = numerator / denominator
-
-        # next_sentence_loss
-        labels = self.reshape(next_sentence_labels, self.last_idx)
-        if labels.max() >= 0:
-            one_hot_labels = self.onehot(labels, 2, self.on_value, self.off_value)
-            per_example_loss = self.neg(self.reduce_sum(
-                one_hot_labels * seq_relationship_score, self.last_idx))
-            next_sentence_loss = self.reduce_mean(per_example_loss, self.last_idx)
-        else:
-            next_sentence_loss = 0
-
-        # total_loss
-        total_loss = masked_lm_loss + next_sentence_loss
-
-        bs, _ = F.shape(input_ids)
-
-        index = self.argmax(prediction_scores)
-        index = self.reshape(index, (bs, -1))
-        eval_acc = F.equal(index, masked_lm_ids)
-        eval_acc = self.cast(eval_acc, mstype.float32)
-        real_acc = eval_acc * masked_lm_weights
-        acc = real_acc.sum()
-        total = masked_lm_weights.astype(mstype.float32).sum()
-
-        return total_loss, acc, total, prediction_scores, masked_lm_ids
-        
 
 class Deberta(Transformer):
     """

@@ -1,3 +1,10 @@
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+#
+# zbo@zju.edu.cn
+# 2022-08-08
+# ============================================================================
+
 import math
 import copy
 from collections import Sequence
@@ -46,43 +53,6 @@ class BertForClassify(nn.Cell):
         # total_loss = F.cast(total_loss, mstype.float32)
         return (logits,)
 
-
-class ClsEvalHead(nn.Cell):
-    """
-    Provide bert pre-training evaluation head.
-
-    Args:
-        config (BertConfig): The config of BertModel.
-
-    Returns:
-        tuple: Tensor, total loss. Tensor, ppl
-    """
-
-    def __init__(self, num_labels, return_all=False, fp16=False, dropout=0.1):
-        super(ClsEvalHead, self).__init__()
-        self.onehot = P.OneHot()
-        self.on_value = Tensor(1.0, mstype.float32)
-        self.off_value = Tensor(0.0, mstype.float32)
-        self.reduce_sum = P.ReduceSum()
-        self.reduce_mean = P.ReduceMean()
-        self.reshape = P.Reshape()
-        self.last_idx = (-1,)
-        self.neg = P.Neg()
-        self.cast = P.Cast()
-        self.argmax = P.Argmax()
-        self.loss_fn = nn.SoftmaxCrossEntropyWithLogits()
-
-    def construct(self, *sample):
-        """Defines the computation performed.
-            sample: ["input_ids", "input_mask", "token_type_id", "labels"]
-        """
-        logits = sample[-1]
-        label = sample[3]
-        # total_loss
-        preds = logits.argmax(-1)
-
-        return (preds, label)
-        
 
 class ClsLoss(nn.SoftmaxCrossEntropyWithLogits):
     def __init__(self, sparse=True, reduction='none'):

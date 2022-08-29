@@ -1,3 +1,9 @@
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+#
+# zbo@zju.edu.cn
+# 2022-08-08
+# ============================================================================
 
 from collections import OrderedDict
 import numpy as np
@@ -6,10 +12,10 @@ import random
 from shutil import copyfile
 from loguru import logger
 
-from MindsporeTrainer.data import ExampleInstance, ExampleSet
+from MindsporeTrainer.data import ExampleInstance, ExampleSet, _truncate_segments
 from MindsporeTrainer.data.example import *
-from MindsporeTrainer.apps.tasks import EvalData, TransformerTask
-from MindsporeTrainer.apps.tasks import register_task
+from MindsporeTrainer.task import TransformerTask
+from MindsporeTrainer.task  import register_task
 from MindsporeTrainer.utils.metrics import *
 from MindsporeTrainer.utils.metrics import BertMetric
 from MindsporeTrainer.utils.masker import NGramMaskGenerator
@@ -20,10 +26,10 @@ from MindsporeTrainer.modeling.tokenizers import BertTokenizer
 class DEBERTATask(TransformerTask):
     def __init__(self, args, **kwargs):
         super().__init__(args, **kwargs)
-        self.max_seq_length = 512
-        self.model_config = 'data/pretrained_models/deberta-base-v2/model_config.json'
+        self.max_seq_len = 512
+        self.model_config = 'data/model_config.json'
         self.vocab_type = 'BERT'
-        self.vocab_path = 'data/pretrained_models/deberta-base-v2/vocab.txt'
+        self.vocab_path = 'data/vocab.txt'
         self.metric = 'bert'
         self.main_metric = 'perplexity'
         self.optimizer_name = 'Lamb'
@@ -31,7 +37,7 @@ class DEBERTATask(TransformerTask):
 
     def train_data(self, **kwargs):
         data_path = os.path.join(self.data_dir, 'daizhige.pkl')
-        data = self.load_data(data_path, 'GW', self.max_seq_len)
+        data = self.load_data(data_path)
         # data = ExampleSet(data)
         output_columns = ["input_ids", "input_mask", "token_type_id", "next_sentence_labels",
                                     "masked_lm_positions", "masked_lm_ids", "masked_lm_weights"]
@@ -45,7 +51,7 @@ class DEBERTATask(TransformerTask):
 
     def eval_data(self, **kwargs):
         data_path = os.path.join(self.data_dir, 'eval.txt')
-        data = self.load_txt_data(data_path, 'GW', self.max_seq_len)
+        data = self.load_txt_data(data_path)
 
         output_columns = ["input_ids", "input_mask", "token_type_id", "next_sentence_labels",
                                     "masked_lm_positions", "masked_lm_ids", "masked_lm_weights"]
@@ -217,7 +223,7 @@ class DEBERTATask(TransformerTask):
         return BertPretrainingLoss(self.tokenizer.vocab_size)
 
     def get_eval_head(self, *args, **kwargs):
-        from MindsporeTrainer.modeling.models import BertEvalHead
+        from MindsporeTrainer.modeling.layers import BertEvalHead
         return BertEvalHead(self.tokenizer.vocab_size)
 
     def get_opt_fn(self, *args, **kwargs):

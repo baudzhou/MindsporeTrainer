@@ -1,3 +1,10 @@
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+#
+# zbo@zju.edu.cn
+# 2022-08-08
+# ============================================================================
+
 from ast import Not
 import time, os
 import mindspore as ms
@@ -73,7 +80,7 @@ class LossMoniter(ms.train.callback.LossMonitor):
 
         if cb_params.cur_step_num % self._per_print_times ==0 :
             # self._last_print_time = cb_params.cur_step_num
-            logger.info("epoch: %s step: %s, loss is %s" % (cb_params.cur_epoch_num, cur_step_in_epoch, loss))
+            logger.info("Evaluating: steps: %s, loss is %s" % (cur_step_in_epoch, loss))
 
 class EvalCallBack(Callback):
     """
@@ -119,25 +126,13 @@ class EvalCallBack(Callback):
     def evaluate(self, run_context):
         cb_params = run_context.original_args()
         self._last_triggered_step = cb_params.cur_step_num 
-        # num_samples = (cb_params.cur_step_num - self.last_eval_step) * self.global_batch
-        # if num_samples < self.eval_samples:
-        #     return
-        # net = cb_params.train_network.network
-        # net.to_float(ms.dtype.float32)
-        # net.return_all = True
-        # net = ModelForEval(net)
-        # self.last_eval_step = cb_params.cur_step_num
-        # total_sumples = cb_params.cur_step_num * self.global_batch
-        # model = ms.train.Model(net, eval_network=net, metrics=self.metric)
+
         metric = self.eval_fn(self.model, 'eval', cb_params.cur_step_num)
         if self.trainer_state.neg_metric:
             metric = -metric
         if metric > self.trainer_state.best_metric:
             self.trainer_state.best_metric = metric
             self.trainer_state.best_steps = cb_params.cur_step_num
-        # print("====================================", flush=True)
-        # print(f"{self.metric} is: ", "%.6f" % metric, ", current samples is: ", total_sumples)
-        # print("====================================", flush=True)
 
     def end(self, run_context):
         """
@@ -257,13 +252,6 @@ class ModelCheckpointWithBest(ModelCheckpoint):
         self.trainer_state = trainer_state
         self.best_metric = self.trainer_state.best_metric
         self.load_checkpoint_path = load_checkpoint_path
-
-    # def begin(self, run_context):
-    #     if self.load_checkpoint_path is not None:
-    #         logger.info(f'Recovering last checkpoint from{self.load_checkpoint_path}')
-    #         param_dict = load_checkpoint(self.load_checkpoint_path)
-    #         net = run_context.cb_params.train_network
-    #         load_param_into_net(net, param_dict)
 
     def save_best(self, cb_params):
         if self.trainer_state.best_metric > self.best_metric:

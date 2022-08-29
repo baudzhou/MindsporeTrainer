@@ -1,11 +1,10 @@
-
-#
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 #
-# WYWEB Authors
-# Date: 01/15/2020
-#
+# zbo@zju.edu.cn
+# 2022-08-08
+# ============================================================================
+
 from mindspore.ops import operations as P
 from mindspore.common import dtype as mstype
 

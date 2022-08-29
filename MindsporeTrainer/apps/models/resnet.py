@@ -310,8 +310,9 @@ class ResNet(nn.Cell):
         self.layer4.pipeline_stage = 1
         self.fc.pipeline_stage = 1
 
-    def construct(self, x):
+    def construct(self, *sample):
         """construct"""
+        x = sample[0]
         x = self.head(x)
         x = self.layer1(x)
         x = self.layer2(x)
@@ -321,7 +322,7 @@ class ResNet(nn.Cell):
         x = self.pool(x, (2, 3))
         x = self.squeeze(x)
         x = self.fc(x)
-        return x
+        return (x,)
 
 
 def resnet50(batch_size, num_classes, eval_model=False):

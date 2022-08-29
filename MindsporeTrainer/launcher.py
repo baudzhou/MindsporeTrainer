@@ -1,9 +1,9 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 #
-# WYWEB Authors
-# Date: 01/25/2020
-#
+# zbo@zju.edu.cn
+# 2022-08-08
+# ============================================================================
 
 import os
 import psutil
@@ -151,12 +151,12 @@ def build_argument_parser():
 
     parser.add_argument("--device_id", type=str, default="0", help="Device id, default is 0.")
     parser.add_argument("--device_num", type=int, default=1, help="Use device nums, default is 1.")
-    # parser.add_argument("--enable_save_ckpt", type=str, default="true", choices=["true", "false"],
-    #                     help="Enable save checkpoint, default is true.")
-    # parser.add_argument("--enable_lossscale", type=str, default="true", choices=["true", "false"],
-    #                     help="Use lossscale or not, default is not.")
-    # parser.add_argument("--do_shuffle", type=str, default="true", choices=["true", "false"],
-    #                     help="Enable shuffle for dataset, default is true.")
+    parser.add_argument("--enable_save_ckpt", type=str, default="true", choices=["true", "false"],
+                        help="Enable save checkpoint, default is true.")
+    parser.add_argument("--enable_lossscale", type=str, default="true", choices=["true", "false"],
+                        help="Use lossscale or not, default is not.")
+    parser.add_argument("--do_shuffle", type=str, default="true", choices=["true", "false"],
+                        help="Enable shuffle for dataset, default is true.")
     parser.add_argument("--enable_data_sink",
                         default=False,
                         action='store_true',
@@ -193,18 +193,18 @@ def main(args):
         raise ValueError("At least one of `do_train` or `do_eval` or `do_predict` must be True.")
     random.seed(args.seed)
     np.random.seed(args.seed)
-    if args.accumulative_update > 1:
-        logger.info("accumulation steps: {}".format(args.accumulative_update))
+    if args.accumulation_steps > 1:
+        logger.info("accumulation steps: {}".format(args.accumulation_steps))
         logger.info("global batch size: {}".format(args.train_batch_size))
         if args.enable_data_sink == "true":
-            args.data_sink_steps *= args.accumulative_update
+            args.data_sink_steps *= args.accumulation_steps
             logger.info("data sink steps: {}".format(args.data_sink_steps))
         if args.enable_save_ckpt == "true":
-            args.save_checkpoint_steps *= args.accumulative_update
-            logger.info("save checkpoint steps: {}".format(args.save_checkpoint_steps))
-        args.train_batch_size = args.train_batch_size // args.accumulative_update
+            args.save_eval_steps *= args.accumulation_steps
+            logger.info("save checkpoint steps: {}".format(args.save_eval_steps))
+        args.train_batch_size = args.train_batch_size // args.accumulation_steps
         if args.train_steps > 0:
-            args.train_steps = args.train_steps * args.accumulative_update
+            args.train_steps = args.train_steps * args.accumulation_steps
 
     task = get_task(args.task_name)(args)
     trainer = DistributedTrainer(args, task)

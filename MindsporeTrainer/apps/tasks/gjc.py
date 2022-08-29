@@ -1,3 +1,9 @@
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+#
+# zbo@zju.edu.cn
+# 2022-08-08
+# ============================================================================
 
 from collections import OrderedDict
 
@@ -5,10 +11,10 @@ import numpy as np
 import os
 from shutil import copyfile
 from loguru import logger
-from data import ExampleInstance, ExampleSet, _truncate_segments
-from data.example import *
-from MindsporeTrainer.apps.tasks.task import EvalData, Task
-from MindsporeTrainer.apps.tasks.task_registry import register_task
+from MindsporeTrainer.data import ExampleInstance, ExampleSet, _truncate_segments
+from MindsporeTrainer.data.example import *
+from MindsporeTrainer.task import EvalData, Task
+from MindsporeTrainer.task  import register_task
 from utils.metrics import *
 
 from mindspore.communication import init, get_rank, get_group_size
@@ -18,7 +24,8 @@ from MindsporeTrainer.utils.metrics import BertMetric, MSAucuracy
 from MindsporeTrainer.utils.masker import NGramMaskGenerator
 from MindsporeTrainer.data.dynamic_dataset import create_dynamic_dataset
 from MindsporeTrainer.modeling.tokenizers import BertTokenizer
-from ..models.classify import BertForClassify, ClsLoss, ClsEvalHead
+from MindsporeTrainer.modeling.layers import ClsEvalHead
+from ..models.classify import BertForClassify, ClsLoss
 
 @register_task(name="GJC", desc="GJC task")
 class GJCTask(Task):

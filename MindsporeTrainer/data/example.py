@@ -1,3 +1,10 @@
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+#
+# zbo@zju.edu.cn
+# 2022-08-08
+# ============================================================================
+
 from collections import OrderedDict
 import numpy as np
 import numpy as np
@@ -109,34 +116,3 @@ def truncate_tokens_pair(tokens_a, tokens_b, max_len, max_len_a=0, max_len_b=0, 
             num_truncated[1] += 1
     return num_truncated_a, num_truncated_b
 
-
-def example_to_feature(tokenizer, example, max_seq_len=512, rng=None, mask_generator = None, ext_params=None, label_type='int', **kwargs):
-  if not rng:
-    rng = random
-  max_num_tokens = max_seq_len - len(example.segments) - 1
-  segments = _truncate_segments([tokenizer.tokenize(s) for s in example.segments], max_num_tokens, rng)
-  tokens = ['[CLS]']
-  type_ids = [0]
-  for i,s in enumerate(segments):
-    tokens.extend(s)
-    tokens.append('[SEP]')
-    type_ids.extend([i]*(len(s)+1))
-  if mask_generator:
-    tokens, lm_labels = mask_generator.mask_tokens(tokens, rng)
-  token_ids = tokenizer.convert_tokens_to_ids(tokens)
-  pos_ids = list(range(len(token_ids)))
-  input_mask = [1]*len(token_ids)
-  features = OrderedDict(input_ids = token_ids,
-      type_ids = type_ids,
-      position_ids = pos_ids,
-      input_mask = input_mask)
-  if mask_generator:
-    features['lm_labels'] = lm_labels
-  padding_size = max(0, max_seq_len - len(token_ids))
-  for f in features:
-    features[f].extend([0]*padding_size)
-    features[f] = torch.tensor(features[f], dtype=torch.int)
-  label_type = torch.int if label_type=='int' else torch.float
-  if example.label is not None:
-    features['labels'] = torch.tensor(example.label, dtype=label_type)
-  return features
