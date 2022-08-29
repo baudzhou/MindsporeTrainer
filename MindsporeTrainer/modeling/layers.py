@@ -1251,77 +1251,6 @@ class FakeHead(nn.Cell):
         return input[-1]
 
 
-class EnhancedMaskDecoder(nn.Cell):
-  def __init__(self, **kwargs):
-    super().__init__()
-    self.config = kwargs
-    self.position_biased_input = self.config.get('position_biased_input', True)
-    # self.lm_head = GetMaskedLMOutput(**kwargs)
-    self.loss_fn = nn.SoftmaxCrossEntropyWithLogits(sparse=True)
-    self._create_attention_mask_from_input_mask = CreateAttentionMaskFromInputMask()
-
-  def construct(self, ctx_layers, z_states, attention_mask, 
-                encoder_layer, embedding_table, relative_attention, 
-                norm_rel_ebd, LayerNorm_fn, relative_pos=None):
-    # if attention_mask.ndim != 2:
-    #   attention_mask = (attention_mask.sum(-2) > 0)
-    #   attention_mask = extended_attention_mask * F.expand_dims(extended_attention_mask.squeeze(-2), -1)
-    # elif attention_mask.ndim == 3:
-    #   attention_mask = F.expand_dims(attention_mask, 1)
-    attention_mask = self._create_attention_mask_from_input_mask(attention_mask)
-    hidden_states = ctx_layers[-2]
-    hidden_states = F.cast(hidden_states, z_states.dtype)
-    # layers = [encoder.layer[-1] for _ in range(2)]
-    layer = encoder_layer
-    if not self.position_biased_input: 
-    #   layers = [encoder.layer[-1] for _ in range(2)]
-      
-      query_states = F.add(z_states, hidden_states) # .astype()
-      #   query_states = z_states
-      query_mask = attention_mask
-      mlm_ctx_layers = []
-      rel_embeddings = get_rel_embedding(embedding_table, relative_attention, norm_rel_ebd, LayerNorm_fn)
-      #layer_module(next_kv, query_states, attention_mask, return_att=return_att, relative_pos=relative_pos, rel_embeddings=rel_embeddings)
-      for i in range(2):
-        # TODO: pass relative pos ids
-        output = layer(hidden_states, query_states, query_mask, return_att=False, relative_pos=relative_pos, rel_embeddings=rel_embeddings)
-        query_states = output
-        mlm_ctx_layers.append(query_states)
-    else:
-      mlm_ctx_layers = [ctx_layers[-1]]
-    # mlm_ctx_layers = self.emd_context_layer(ctx_layers, z_states, attention_mask, encoder, relative_pos=relative_pos)
-    ctx_layer = mlm_ctx_layers[-1]
-    # lm_logits = self.lm_head(ctx_layer, ebd_weight, masked_lm_positions)
-    return ctx_layer
-
-  def emd_context_layer(self, encoder_layers, z_states, attention_mask, encoder, relative_pos=None):
-    if attention_mask.ndim <= 2:
-      extended_attention_mask = attention_mask.view(attention_mask.shape + (1, 1))
-      attention_mask = extended_attention_mask * F.expand_dims(extended_attention_mask.squeeze(-2), -1)
-    # elif attention_mask.ndim == 3:
-    #   attention_mask = F.expand_dims(attention_mask, 1)
-    hidden_states = encoder_layers[-2]
-    hidden_states = F.cast(hidden_states, z_states.dtype)
-    if not self.position_biased_input: 
-      layers = [encoder.layer[-1] for _ in range(2)]
-      
-      query_states = F.add(z_states, hidden_states) # .astype()
-      #   query_states = z_states
-      query_mask = attention_mask
-      outputs = []
-      rel_embeddings = get_rel_embedding(encoder.rel_embeddings, encoder.relative_attention, encoder.norm_rel_ebd, encoder.LayerNorm)
-      #layer_module(next_kv, query_states, attention_mask, return_att=return_att, relative_pos=relative_pos, rel_embeddings=rel_embeddings)
-      for layer in layers:
-        # TODO: pass relative pos ids
-        output = layer(hidden_states, query_states, query_mask, return_att=False, relative_pos=relative_pos, rel_embeddings=rel_embeddings)
-        query_states = output
-        outputs.append(query_states)
-    else:
-      outputs = [encoder_layers[-1]]
-    
-    return outputs
-
-
 class BertEvalHead(nn.Cell):
     """
     Provide bert pre-training evaluation head.
@@ -1427,6 +1356,76 @@ class ClsEvalHead(nn.Cell):
         """
         loss = self.loss_fn(logits, labels)
         return (loss, logits, labels)
+
+class EnhancedMaskDecoder(nn.Cell):
+  def __init__(self, **kwargs):
+    super().__init__()
+    self.config = kwargs
+    self.position_biased_input = self.config.get('position_biased_input', True)
+    # self.lm_head = GetMaskedLMOutput(**kwargs)
+    self.loss_fn = nn.SoftmaxCrossEntropyWithLogits(sparse=True)
+    self._create_attention_mask_from_input_mask = CreateAttentionMaskFromInputMask()
+
+  def construct(self, ctx_layers, z_states, attention_mask, 
+                encoder_layer, embedding_table, relative_attention, 
+                norm_rel_ebd, LayerNorm_fn, relative_pos=None):
+    # if attention_mask.ndim != 2:
+    #   attention_mask = (attention_mask.sum(-2) > 0)
+    #   attention_mask = extended_attention_mask * F.expand_dims(extended_attention_mask.squeeze(-2), -1)
+    # elif attention_mask.ndim == 3:
+    #   attention_mask = F.expand_dims(attention_mask, 1)
+    attention_mask = self._create_attention_mask_from_input_mask(attention_mask)
+    hidden_states = ctx_layers[-2]
+    hidden_states = F.cast(hidden_states, z_states.dtype)
+    # layers = [encoder.layer[-1] for _ in range(2)]
+    layer = encoder_layer
+    if not self.position_biased_input: 
+    #   layers = [encoder.layer[-1] for _ in range(2)]
+      
+      query_states = F.add(z_states, hidden_states) # .astype()
+      #   query_states = z_states
+      query_mask = attention_mask
+      mlm_ctx_layers = []
+      rel_embeddings = get_rel_embedding(embedding_table, relative_attention, norm_rel_ebd, LayerNorm_fn)
+      #layer_module(next_kv, query_states, attention_mask, return_att=return_att, relative_pos=relative_pos, rel_embeddings=rel_embeddings)
+      for i in range(2):
+        # TODO: pass relative pos ids
+        output = layer(hidden_states, query_states, query_mask, return_att=False, relative_pos=relative_pos, rel_embeddings=rel_embeddings)
+        query_states = output
+        mlm_ctx_layers.append(query_states)
+    else:
+      mlm_ctx_layers = [ctx_layers[-1]]
+    # mlm_ctx_layers = self.emd_context_layer(ctx_layers, z_states, attention_mask, encoder, relative_pos=relative_pos)
+    ctx_layer = mlm_ctx_layers[-1]
+    # lm_logits = self.lm_head(ctx_layer, ebd_weight, masked_lm_positions)
+    return ctx_layer
+
+  def emd_context_layer(self, encoder_layers, z_states, attention_mask, encoder, relative_pos=None):
+    if attention_mask.ndim <= 2:
+      extended_attention_mask = attention_mask.view(attention_mask.shape + (1, 1))
+      attention_mask = extended_attention_mask * F.expand_dims(extended_attention_mask.squeeze(-2), -1)
+    # elif attention_mask.ndim == 3:
+    #   attention_mask = F.expand_dims(attention_mask, 1)
+    hidden_states = encoder_layers[-2]
+    hidden_states = F.cast(hidden_states, z_states.dtype)
+    if not self.position_biased_input: 
+      layers = [encoder.layer[-1] for _ in range(2)]
+      
+      query_states = F.add(z_states, hidden_states) # .astype()
+      #   query_states = z_states
+      query_mask = attention_mask
+      outputs = []
+      rel_embeddings = get_rel_embedding(encoder.rel_embeddings, encoder.relative_attention, encoder.norm_rel_ebd, encoder.LayerNorm)
+      #layer_module(next_kv, query_states, attention_mask, return_att=return_att, relative_pos=relative_pos, rel_embeddings=rel_embeddings)
+      for layer in layers:
+        # TODO: pass relative pos ids
+        output = layer(hidden_states, query_states, query_mask, return_att=False, relative_pos=relative_pos, rel_embeddings=rel_embeddings)
+        query_states = output
+        outputs.append(query_states)
+    else:
+      outputs = [encoder_layers[-1]]
+    
+    return outputs
 
 
 def make_log_bucket_position(relative_pos, bucket_size, max_position):
