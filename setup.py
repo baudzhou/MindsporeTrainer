@@ -2,34 +2,13 @@
 from setuptools import setup
 from setuptools import find_packages
 
-LONGDOC = """
-MindsporeTrainer
-=====
-
-基于昇思MindSpore的训练框架
-
-
-GitHub: https://github.com/baudzhou/MindsporeTrainer
-
-特点
-====
-
-1.	采用纯python实现，方便多卡训练过程中的调试
-2.	易于扩展，对新任务采用插件式接入
-3.	方便实现多种模型的训练、评估、预测等
-
-
-安装说明
-========
-
-推荐使用Python 3.7.x，在mindspore 1.5上测试通过
-
-"""
+with open("README.md", "r") as fh:
+    long_description = fh.read()
 
 setup(name='MindsporeTrainer',
       version='0.1.0',
       description='Make Mindspore Training Easier',
-      long_description=LONGDOC,
+      long_description=long_description,
       author='Zhou, Bo',
       author_email='baudzhou@outlook.com',
       url='https://github.com/baudzhou/MindsporeTrainer',
