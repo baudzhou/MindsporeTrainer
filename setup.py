@@ -21,8 +21,8 @@ setup(name='MindsporeTrainer',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Topic :: Text Processing',
-        'TOPIC :: SCIENTIFIC/ENGINEERING :: ARTIFICIAL INTELLIGENCE',
-        'TOPIC :: SCIENTIFIC/ENGINEERING :: IMAGE PROCESSING',
+        'TOPIC :: Scientific/Engineering :: Artificial Intelligence',
+        'TOPIC :: Scientific/Engineering :: Image Processing',
       ],
       install_requires=[
                         'loguru',
@@ -33,6 +33,4 @@ setup(name='MindsporeTrainer',
                         ],
       keywords='Deep Learning, NLP, CV, Transformers, MindSpore',
       packages=find_packages(),
-      # package_dir={'mstrainer':'MindsporeTrainer'},
-      # package_data={'':['*.py']}
 )
