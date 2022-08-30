@@ -1,27 +1,33 @@
 # MindsporeTrainer 让Mindspore的算法研究更容易一些。
  ![Version](https://img.shields.io/badge/version-0.1.0-blue) ![Python-Version](https://img.shields.io/badge/python-3.x-blue) ![issues](https://img.shields.io/github/issues/baudzhou/MindsporeTrainer) ![PyPI - Status](https://img.shields.io/pypi/status/MindsporeTrainer) ![License](https://img.shields.io/github/license/baudzhou/MindsporeTrainer) ![PyPI - Downloads](https://img.shields.io/pypi/dm/MindsporeTrainer)  
 基于昇思MindSpore的训练框架。  
-Mindspore上手不易，希望能帮助各位炼丹师的升级之路更容易些。
-主要的几个出发点是：  
-1.	采用纯python实现，方便多卡训练过程中的调试
-2.	易于扩展，对新任务采用插件式接入
-3.	方便实现多种模型的训练、评估、预测等
-[Home page](https://github.com/baudzhou/MindsporeTrainer)
+Mindspore上手不易，希望能帮助各位炼丹师的升级之路更容易些。  
+
+[**Home page**](https://github.com/baudzhou/MindsporeTrainer)
 # 目录
+* [主要特性](#主要特性)
 * [安装](#安装)
 * [使用方法](#使用方法)
+    * [DeBERTa预训练任务示例](#DeBERTa预训练任务示例)
+    * [多卡训练](#多卡训练)
 * [模型创建](#模型创建)
 * [参数介绍](#参数介绍)
 * [Task](#Task)
 * [API](#API)
 * [models](#models)
+# 主要特性
+主要的几个出发点是：  
++ 采用纯python实现，方便多卡训练过程中的调试
++ 易于扩展，对新任务采用插件式接入
++ 方便实现多种模型的训练、评估、预测等  
 # 安装
 ## pip
 `pip install MindsporeTrainer`
 ## 源码
 `python setup.py`
-# 使用方法（以作者复现的DeBERTa为例）
-## 1. 定义task
+# 使用方法
+## DeBERTa预训练任务示例
+### 1. 定义task
 [MindsporeTrainer/apps/tasks/deberta.py](./MindsporeTrainer/apps/tasks/deberta.py)
 ```
 from collections import OrderedDict
@@ -167,15 +173,35 @@ class DEBERTATask(TransformerTask):
         return None
 
 ```
-## 2. 编写启动脚本
+### 2. 编写启动脚本
 run.py
 ```
 import MindsporeTrainer as mst
 mst.launch()
 ```
-## 3. 运行任务
+### 3. 运行任务
 ```
 python run.py --task_name=RESNETTask --do_train --do_eval --data_dir=data --num_train_epochs=10 --learning_rate=1e-2 --train_batch_size=64 --save_eval_steps=1000 --output_dir=output
+```
+## 多卡训练
+官方推荐编写bash脚本，利用mpi进行训练，这里采用了纯python的实现。
+### 定义必须的环境变量
+
+bash
+```
+export RANK_SIZE = 8
+export RANK_TABLE_FILE = /path/hccl.json
+```
+vscode调试环境
+```
+"env": {
+    "RANK_SIZE": "8",
+    "RANK_TABLE_FILE": "/path/hccl.json"
+}
+```
+设置参数，开始训练
+```
+python run.py ...... --device_num=8 --device_id=0,1,2,3,4,5,6,7
 ```
 # 模型创建
 ## 自定义模型
