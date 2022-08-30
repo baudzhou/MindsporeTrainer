@@ -1,5 +1,10 @@
 # MindsporeTrainer 让Mindspore的算法研究更容易一些。
- ![Version](https://img.shields.io/badge/version-0.1.0-blue) ![Python-Version](https://img.shields.io/badge/python-3.x-blue) ![issues](https://img.shields.io/github/issues/baudzhou/MindsporeTrainer) ![PyPI - Status](https://img.shields.io/pypi/status/MindsporeTrainer) ![License](https://img.shields.io/github/license/baudzhou/MindsporeTrainer) ![PyPI - Downloads](https://img.shields.io/pypi/dm/MindsporeTrainer)  
+ ![PyPI](https://img.shields.io/pypi/v/MindsporeTrainer?color=blue) 
+ ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/MindsporeTrainer)
+ ![GitHub Workflow Status](https://img.shields.io/github/workflow/status/baudzhou/MindsporeTrainer/Upload%20Python%20Package)
+  ![issues](https://img.shields.io/github/issues/baudzhou/MindsporeTrainer) 
+  ![License](https://img.shields.io/github/license/baudzhou/MindsporeTrainer) 
+
 基于昇思MindSpore的训练框架。  
 Mindspore上手不易，希望能帮助各位炼丹师的升级之路更容易些。  
 
