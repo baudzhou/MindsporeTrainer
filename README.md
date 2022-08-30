@@ -1,10 +1,12 @@
 # MindsporeTrainer 让Mindspore的算法研究更容易一些。
+ ![Version](https://img.shields.io/badge/version-0.1.0-blue) ![Python-Version](https://img.shields.io/badge/python-3.x-blue) ![issues](https://img.shields.io/github/issues/baudzhou/MindsporeTrainer) ![PyPI - Status](https://img.shields.io/pypi/status/MindsporeTrainer) ![License](https://img.shields.io/github/license/baudzhou/MindsporeTrainer) [![Downloads](https://pepy.tech/badge/MindsporeTrainer)](https://pepy.tech/project/MindsporeTrainer)
 基于昇思MindSpore的训练框架。  
 Mindspore上手不易，希望能帮助各位炼丹师的升级之路更容易些。
 主要的几个出发点是：  
 1.	采用纯python实现，方便多卡训练过程中的调试
 2.	易于扩展，对新任务采用插件式接入
 3.	方便实现多种模型的训练、评估、预测等
+[Home page](https://github.com/baudzhou/MindsporeTrainer)
 # 目录
 * [安装](#安装)
 * [使用方法](#使用方法)
@@ -12,6 +14,7 @@ Mindspore上手不易，希望能帮助各位炼丹师的升级之路更容易�
 * [参数介绍](#参数介绍)
 * [Task](#Task)
 * [API](#API)
+* [models](#models)
 # 安装
 ## pip
 `pip install MindsporeTrainer`
@@ -19,8 +22,8 @@ Mindspore上手不易，希望能帮助各位炼丹师的升级之路更容易�
 `python setup.py`
 # 使用方法（以作者复现的DeBERTa为例）
 ## 1. 定义task
+[MindsporeTrainer/apps/tasks/deberta.py](./MindsporeTrainer/apps/tasks/deberta.py)
 ```
-[代码](MindsporeTrainer/apps/tasks/deberta.py)
 from collections import OrderedDict
 import numpy as np
 import os
@@ -577,3 +580,10 @@ class Task():
     Transformer任务类，继承自Task
 ## MindsporeTrainer.optims
     优化器、学习率调度等
+
+# models
+作者实现的模型，努力丰富中......
+## DeBERTa
+原论文：[DeBERTa: Decoding-enhanced BERT with Disentangled Attention](https://arxiv.org/abs/2006.03654)  
+原仓库：[https://github.com/microsoft/DeBERTa](https://github.com/microsoft/DeBERTa)  
+实现的是DeBERTa v2，详见[DeBERTa](./MindsporeTrainer/apps/tasks/deberta.py) task  
