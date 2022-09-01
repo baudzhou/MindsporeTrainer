@@ -51,6 +51,8 @@ def load_tasks(task_dir=None, task_path=None):
       importlib.import_module(f'{m}')
       return
   script_dir = os.path.dirname(os.path.abspath(__file__))
+  base_dir = script_dir.replace('/task', '')
+  script_dir = base_dir + '/apps/tasks'
   sys.path.append(script_dir)
   sys_tasks = glob(os.path.join(script_dir, "*.py"))
   for t in sys_tasks:

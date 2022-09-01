@@ -24,7 +24,7 @@ from MindsporeTrainer.utils.metrics import MSAucuracy
 from MindsporeTrainer.optims import get_optimizer
 from MindsporeTrainer.optims.adam import *
 from MindsporeTrainer.modeling.modeling_adapter import *
-from MindsporeTrainer.apps.tasks import Task
+from MindsporeTrainer.task import Task
 from MindsporeTrainer.utils.callbacks import EvalCallBack, StateCallback, ModelCheckpointWithBest
 from MindsporeTrainer.utils.checkpoint import load_ckpt
 

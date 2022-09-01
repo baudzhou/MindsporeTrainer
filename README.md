@@ -619,3 +619,7 @@ class Task():
 原论文：[DeBERTa: Decoding-enhanced BERT with Disentangled Attention](https://arxiv.org/abs/2006.03654)  
 原仓库：[https://github.com/microsoft/DeBERTa](https://github.com/microsoft/DeBERTa)  
 实现的是DeBERTa v2，详见[DeBERTa](./MindsporeTrainer/apps/tasks/deberta.py) task  
+# 作者
+周波 
+
+DMAC Group@ZJU 浙江大学人工智能研究所

@@ -41,7 +41,7 @@ class DEBERTATask(TransformerTask):
         # data = ExampleSet(data)
         output_columns = ["input_ids", "input_mask", "token_type_id", "next_sentence_labels",
                                     "masked_lm_positions", "masked_lm_ids", "masked_lm_weights"]
-        return create_dynamic_dataset(data, self.get_feature_fn(), 
+        return create_dynamic_dataset(data, [self.get_feature_fn()], 
                                       batch_size=self.train_batch_size,
                                       output_columns=output_columns, 
                                       repeat=self.num_train_epochs,

@@ -22,7 +22,7 @@ from mindspore import context
 from loguru import logger
 
 from MindsporeTrainer.utils import *
-from MindsporeTrainer.apps.tasks import load_tasks, get_task
+from MindsporeTrainer.task import load_tasks, get_task
 from MindsporeTrainer.training import DistributedTrainer
 from MindsporeTrainer.training import get_args as get_training_args
 from MindsporeTrainer.optims import get_args as get_optims_args
@@ -59,11 +59,11 @@ class LoadTaskAction(argparse.Action):
                     parser.add_argument_group(title=f'Task {task._meta["name"]}', description=task._meta["desc"])
                 return
 
-        # assert values.lower() in all_tasks, f'{values} is not registed. Valid tasks {list(all_tasks.keys())}'
-        task = get_task(values)
-        group = parser.add_argument_group(title=f'Task {task._meta["name"]}', description=task._meta["desc"])
-        task.add_arguments(group)
-        type(self)._registered = True
+            # assert values.lower() in all_tasks, f'{values} is not registed. Valid tasks {list(all_tasks.keys())}'
+            task = get_task(values)
+            group = parser.add_argument_group(title=f'Task {task._meta["name"]}', description=task._meta["desc"])
+            task.add_arguments(group)
+            type(self)._registered = True
 
 def build_argument_parser():
     parser = argparse.ArgumentParser(parents=[get_optims_args(), get_training_args()], formatter_class=argparse.ArgumentDefaultsHelpFormatter)

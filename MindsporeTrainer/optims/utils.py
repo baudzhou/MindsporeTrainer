@@ -165,6 +165,30 @@ class LearningRate(LearningRateSchedule):
             lr = decay_lr
         return lr
 
+
+class LearningRateEpoch(LearningRateSchedule):
+    """
+    Warmup-decay learning rate for  network.
+    """
+    def __init__(self, steps_per_epoch, lr_steps, lr, weight_decay):
+        super(LearningRate, self).__init__()
+        self.steps_per_epoch = steps_per_epoch
+        self.lr_steps = lr_steps
+        self.lr = lr
+        self.weight_decay = weight_decay
+
+        self.greater = P.Greater()
+        self.one = Tensor(np.array([1.0]).astype(np.float32))
+        self.cast = P.Cast()
+
+    def construct(self, global_step):
+        epoch = global_step // self.steps_per_epoch
+        decay = 0.1 ** (sum(epoch >= np.array(self.lr_steps)))
+        lr = self.lr * decay
+        decay = self.weight_decay
+        return lr
+
+
 def _get_poly_lr(global_step, lr_init, lr_end, lr_max, warmup_steps, total_steps, poly_power):
     """
     generate learning rate array

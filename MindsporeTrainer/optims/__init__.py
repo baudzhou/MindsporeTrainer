@@ -6,7 +6,7 @@
 # ============================================================================
 
 from mindspore import context
-from mindspore.nn.optim import Lamb, Momentum, AdamWeightDecay
+from mindspore.nn.optim import Lamb, Momentum, AdamWeightDecay, SGD
 from .utils import LearningRate
 
 from .args import get_args
@@ -25,10 +25,10 @@ def get_optimizer(args_opt, network, opt_name='AdamWeightDecay'):
     opt_overflow = False
     if opt_name == 'Lamb':
         lr_schedule = LearningRate(learning_rate=args_opt.learning_rate,
-                                        end_learning_rate=0.0,
-                                        warmup_steps=int(args_opt.warmup * args_opt.train_steps),
-                                        decay_steps=args_opt.train_steps,
-                                        power=2.0)
+                                    end_learning_rate=0.0,
+                                    warmup_steps=int(args_opt.warmup * args_opt.train_steps),
+                                    decay_steps=args_opt.train_steps,
+                                    power=2.0)
 
         optimizer = Lamb(group_params, learning_rate=lr_schedule, eps=1e-8)
     elif opt_name == 'Momentum':
@@ -36,10 +36,10 @@ def get_optimizer(args_opt, network, opt_name='AdamWeightDecay'):
                              momentum=0.9)
     elif opt_name == 'AdamWeightDecay':
         lr_schedule = LearningRate(learning_rate=args_opt.learning_rate,
-                                        end_learning_rate=0.0,
-                                        warmup_steps=int(args_opt.warmup * args_opt.train_steps),
-                                        decay_steps=args_opt.train_steps,
-                                        power=5.0)
+                                    end_learning_rate=0.0,
+                                    warmup_steps=int(args_opt.warmup * args_opt.train_steps),
+                                    decay_steps=args_opt.train_steps,
+                                    power=5.0)
 
         if args_opt.enable_lossscale == "true" and args_opt.device_target == 'GPU':
             optimizer = AdamWeightDecayX(group_params, learning_rate=lr_schedule, eps=1e-6)

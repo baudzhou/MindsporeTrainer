@@ -18,7 +18,7 @@ logger=loguru.logger
 
 def create_dynamic_dataset(examples, feature_fn, batch_size, output_columns, column_names=["example", "label"],
                            buffer_size=1000, repeat=1, num_workers=1, num_shards=None,
-                           shard_id=None):
+                           shard_id=None, type_cast_op=[C.c_transforms.TypeCast(mstype.int32)]):
     '''
         Provide dynamic data set.
         Args:
@@ -31,15 +31,18 @@ def create_dynamic_dataset(examples, feature_fn, batch_size, output_columns, col
                         num_shards=num_shards,
                         shard_id=shard_id
                         )
-    dataset = dataset.map(feature_fn,
-                        input_columns=column_names,
-                        output_columns=output_columns,
-                        column_order=output_columns,
-                        num_parallel_workers=num_workers
-                        )
-    type_cast_op = C.c_transforms.TypeCast(mstype.int32)
-    for col in output_columns:
-        dataset = dataset.map(operations=type_cast_op, input_columns=col)
+    for fn in feature_fn:
+        dataset = dataset.map(fn,
+                            input_columns=column_names,
+                            output_columns=output_columns,
+                            column_order=output_columns,
+                            num_parallel_workers=num_workers
+                            )
+    if type_cast_op is not None:
+        if len(type_cast_op) == 1:
+            type_cast_op = type_cast_op * len(output_columns)
+        for col, op in zip(output_columns, type_cast_op):
+            dataset = dataset.map(operations=op, input_columns=col)
     dataset = dataset.batch(batch_size=batch_size, drop_remainder=True)
     print_example(dataset)
     return dataset

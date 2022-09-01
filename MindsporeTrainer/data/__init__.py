@@ -5,7 +5,7 @@
 # 2022-08-08
 # ============================================================================
 
-from .example import ExampleInstance, ExampleSet, example_to_feature, _truncate_segments
+from .example import ExampleInstance, ExampleSet, _truncate_segments
 # from .dataloader import SequentialDataLoader
 from .dynamic_dataset import *
 # from .data_sampler import *
