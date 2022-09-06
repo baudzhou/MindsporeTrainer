@@ -208,9 +208,17 @@ class StateCallback(Callback):
         #     self._last_print_time = cb_params.cur_step_num
             # print("epoch: %s step: %s, loss is %s" % (cb_params.cur_epoch_num, cur_step_in_epoch, loss), flush=True)
         if self.optimizer.dynamic_lr:
-            lr = self.optimizer.learning_rate(Tensor(self.optimizer.global_step)).asnumpy()
+            lr = self.optimizer.get_lr()
+            if not isinstance(lr, tuple):
+                lr = (lr, )
+            lr = sum(lr) / len(lr)
+            #learning_rate(Tensor(self.optimizer.global_step)).asnumpy()
+            lr = lr.asnumpy()
         else:
-            lr = self.optimizer.get_lr().asnumpy()
+            lrs = self.optimizer.get_lr()
+            if not isinstance(lrs, tuple):
+                lrs = (lrs, )
+            lr = sum(lrs).asnumpy()
         if hasattr(cb_params.network, 'loss_scale'):
             loss_scale = getattr(cb_params.network, 'loss_scale', 1) * 1
             loss_scale = loss_scale.asnumpy()

@@ -148,7 +148,7 @@ class TrainOneStepCell(nn.TrainOneStepCell):
         enable_clip_grad (boolean): If True, clip gradients in BertTrainOneStepCell. Default: True.
     """
 
-    def __init__(self, network, optimizer, sens=1.0, enable_clip_grad=True):
+    def __init__(self, network, optimizer, sens=1.0, enable_clip_grad=False):
         super(TrainOneStepCell, self).__init__(network, optimizer, sens)
         # self.cast = P.Cast()
         self.hyper_map = C.HyperMap()
@@ -796,7 +796,7 @@ def model_adapter(model, optimizer, scale_update_cell=None, accumulation_steps=1
         else:
             network = TrainOneStepWithLossScaleCell(model, optimizer=optimizer, 
                                                     scale_update_cell=scale_update_cell, 
-                                                    opt_overflow=opt_overflow)
+                                                    opt_overflow=opt_overflow).set_train()
     else:
         network = TrainAccumulationAllReducePostWithLossScaleCell(model, optimizer=optimizer,
                                                 scale_update_cell=scale_update_cell,

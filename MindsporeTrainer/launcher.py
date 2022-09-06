@@ -168,6 +168,8 @@ def build_argument_parser():
                         help="Whether to allreduce after accumulation of N steps or after each step, default is true.")
     # parser.add_argument("--save_checkpoint_path", type=str, default="", help="Save checkpoint path")
     parser.add_argument("--load_checkpoint_path", type=str, default="", help="Load checkpoint file path")
+    parser.add_argument("--restore_by_prefix", default=False, action='store_true', help="Load all of the parameters")
+    parser.add_argument("--prefix", type=str, default="backbone", help="remove the prefix when load ckpt")
     parser.add_argument("--save_eval_steps", type=int, default=1000, help="Save checkpoint and evaluate steps, "
                                                                                 "default is 1000.")
     parser.add_argument("--train_steps", type=int, default=-1, help="Training Steps, default is -1, "
@@ -333,20 +335,20 @@ def launch():
                     child_process.append(child)
             else:
                 id = 0
-        if args_opt.rank == -1:
-            os.environ["MS_ROLE"] = "MS_SCHED"
-        set_context(args_opt)
-        try:
-            main(args_opt)
-        except Exception as ex:
+            if args_opt.rank == -1:
+                os.environ["MS_ROLE"] = "MS_SCHED"
+            set_context(args_opt)
             try:
-                logger.exception(f'Uncatched exception happened during execution.')
-                import atexit
-                atexit._run_exitfuncs()
-            except:
-                pass
-            kill_children()
-            os._exit(-1)
+                main(args_opt)
+            except Exception as ex:
+                try:
+                    logger.exception(f'Uncatched exception happened during execution.')
+                    import atexit
+                    atexit._run_exitfuncs()
+                except:
+                    pass
+                kill_children()
+                os._exit(-1)
 
     else:
         args_opt.rank = 0

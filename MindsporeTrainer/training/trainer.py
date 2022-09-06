@@ -246,7 +246,7 @@ class DistributedTrainer:
         else:
             self.model = NetworkWithLoss(self.model, self.loss_fn, return_all=True)
         if len(self.args.load_checkpoint_path) > 0:
-            load_ckpt(self.model, self.args.load_checkpoint_path)
+            load_ckpt(self.model, self.args.load_checkpoint_path, self.args.restore_by_prefix, self.args.prefix)
         if self.args.do_eval:
             metrics = self.task.get_metrics()
             self.eval_data = self.task.eval_data()
@@ -312,7 +312,7 @@ class DistributedTrainer:
         elif self.args.do_predict:
             self.model = ModelForEval(self.model.net, self.eval_head)
             if len(self.args.load_checkpoint_path) > 0:
-                load_ckpt(self.model, self.args.load_checkpoint_path)
+                load_ckpt(self.model, self.args.load_checkpoint_path, self.args.restore_by_prefix, self.args.prefix)
             model = Model(self.model)
             pred_fn = self.task.get_pred_fn(data=self.eval_data, output_dir=self.args.output_dir, rank=self.args.local_rank)
             if pred_fn is None:
@@ -321,7 +321,7 @@ class DistributedTrainer:
         elif self.args.do_eval and not self.args.do_train:
             self.model = ModelForEval(self.model, self.eval_head)
             if len(self.args.load_checkpoint_path) > 0:
-                load_ckpt(self.model, self.args.load_checkpoint_path)
+                load_ckpt(self.model, self.args.load_checkpoint_path, self.args.restore_by_prefix, self.args.prefix)
             model = Model(self.model, eval_network=self.model, metrics=metrics)
             main_metric = self.task.main_metric
             metric = self.task.metric

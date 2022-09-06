@@ -47,6 +47,16 @@ class CreateAttentionMaskFromInputMask(nn.Cell):
         return attention_mask
 
 
+class CellList(nn.CellList):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+    
+    def construct(self, *inputs):
+        for cell in self._cells.values():
+            inputs = (cell(*inputs),)
+        return inputs[0]
+
+
 class Embeddings(nn.Cell):
     def __init__(self,
                  use_one_hot_embeddings=False,
