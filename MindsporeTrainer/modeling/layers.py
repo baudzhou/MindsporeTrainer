@@ -1349,23 +1349,13 @@ class ClsEvalHead(nn.Cell):
 
     def __init__(self, num_labels, return_all=False, fp16=False, dropout=0.1):
         super(ClsEvalHead, self).__init__()
-        self.onehot = P.OneHot()
-        self.on_value = Tensor(1.0, mstype.float32)
-        self.off_value = Tensor(0.0, mstype.float32)
-        self.reduce_sum = P.ReduceSum()
-        self.reduce_mean = P.ReduceMean()
-        self.reshape = P.Reshape()
-        self.last_idx = (-1,)
-        self.neg = P.Neg()
-        self.cast = P.Cast()
-        self.argmax = P.Argmax()
         self.loss_fn = nn.SoftmaxCrossEntropyWithLogits(sparse=True, reduction='mean')
 
     def construct(self, logits, labels):
         """Defines the computation performed.
         """
         loss = self.loss_fn(logits, labels)
-        return (loss, logits, labels)
+        return (loss, logits, F.cast(labels, mstype.int32))
 
 class EnhancedMaskDecoder(nn.Cell):
   def __init__(self, **kwargs):

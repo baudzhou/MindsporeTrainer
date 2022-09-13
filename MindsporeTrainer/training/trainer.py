@@ -245,8 +245,7 @@ class DistributedTrainer:
             self.model = amp.build_train_network(self.model, self.loss_fn, level='O2')
         else:
             self.model = NetworkWithLoss(self.model, self.loss_fn, return_all=True)
-        if len(self.args.load_checkpoint_path) > 0:
-            load_ckpt(self.model, self.args.load_checkpoint_path, self.args.restore_by_prefix, self.args.prefix)
+
         if self.args.do_eval:
             metrics = self.task.get_metrics()
             self.eval_data = self.task.eval_data()
@@ -292,6 +291,8 @@ class DistributedTrainer:
             if self.args.thor:
                 from mindspore.train.train_thor import ConvertModelUtils
                 model = ConvertModelUtils().convert_to_thor_model(model, network=network, optimizer=self.optimizer)
+            if len(self.args.load_checkpoint_path) > 0:
+                load_ckpt(network, self.args.load_checkpoint_path, self.args.restore_by_prefix, self.args.prefix)
             if self.args.do_eval:
                 main_metric = self.task.main_metric
                 eval_fn = self.task.get_eval_fn(data=self.eval_data, output_dir=self.args.output_dir, rank=self.args.rank)
@@ -301,7 +302,9 @@ class DistributedTrainer:
                 eval_callback = EvalCallBack(model, self.trainer_state, self.eval_data, 0, eval_fn, self.args.train_steps,
                                              eval_steps=self.args.save_eval_steps, rank=self.args.local_rank)
                 callbacks = [eval_callback] + callbacks
-
+            cb = self.task.get_callbacks()
+            if cb is not None:
+                callbacks.append(cb)
             model.train(self.args.num_train_epochs, 
                         self.train_data, 
                         callbacks=callbacks, 

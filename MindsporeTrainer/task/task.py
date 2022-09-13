@@ -9,7 +9,7 @@ import os
 import csv
 from collections import OrderedDict
 import numpy as np
-from utils.metrics import *
+from MindsporeTrainer.utils.metrics import *
 from mindspore.communication import get_rank, get_group_size
 
 from MindsporeTrainer.modeling.layers import FakeHead
@@ -168,6 +168,9 @@ class Task():
         Get a model instance
         """
         raise NotImplementedError('method not implemented yet.')
+
+    def get_callbacks(self, *args, **kwargs):
+        return None
 
     @classmethod
     def add_arguments(cls, parser):

@@ -124,13 +124,13 @@ class ModelForEval(nn.Cell):
             output = self.eval_head(*(pred_scores + (sample[1],)))
         else:
             output = self.eval_head(*(sample + pred_scores))
-        out = []
+        out = ()
         for m in output:
             if m.ndim == 0:
                 m = F.expand_dims(m, 0)
-                out.append(self.allgather(m))
+                out += (self.allgather(m),)
             else:
-                out.append(self.allgather(m))
+                out += (self.allgather(m),)
         return out
 
 
