@@ -292,7 +292,7 @@ def launch():
             if args_opt.rank == -1:
                 try:
                     for i, id in enumerate(device_id):
-                        rank_id = id + args_opt.local_rank
+                        rank_id = i + args_opt.local_rank
                         os.putenv('RANK_ID', str(rank_id))
                         os.putenv('DEVICE_ID', str(id))
                         child = subprocess.Popen(['python'] + argv + [f'--rank={rank_id}'] + [f'--device_id={id}'])

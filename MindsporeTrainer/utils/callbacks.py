@@ -208,17 +208,17 @@ class StateCallback(Callback):
         #     self._last_print_time = cb_params.cur_step_num
             # print("epoch: %s step: %s, loss is %s" % (cb_params.cur_epoch_num, cur_step_in_epoch, loss), flush=True)
         if self.optimizer.dynamic_lr:
-            lr = get_lr(self.optimizer)
+            lr = self.optimizer.get_lr()
             if not isinstance(lr, tuple):
                 lr = (lr, )
             lr = sum(lr) / len(lr)
             #learning_rate(Tensor(self.optimizer.global_step)).asnumpy()
             lr = lr.asnumpy()
         else:
-            lrs = get_lr(self.optimizer)
+            lrs = self.optimizer.get_lr()
             if not isinstance(lrs, tuple):
                 lrs = (lrs, )
-            lr = sum(lrs).asnumpy() / len(lrs)
+            lr = sum(lrs).asnumpy()
         if hasattr(cb_params.network, 'loss_scale'):
             loss_scale = getattr(cb_params.network, 'loss_scale', 1) * 1
             loss_scale = loss_scale.asnumpy()
@@ -360,24 +360,3 @@ class EvalResultsCallback(Callback):
             self.results['loss'] = np.concatenate([self.results['loss'], loss], axis=0)
             self.results['net_output'] = np.concatenate([self.results['net_output'], net_output], axis=0)
             self.results['label'] = np.concatenate([self.results['label'], label], axis=0)
-
-
-def get_lr(optimizer):
-    """
-    The optimizer calls this interface to get the learning rate for the current step. User-defined optimizers based
-    on :class:`mindspore.nn.Optimizer` can also call this interface before updating the parameters.
-
-    Returns:
-        float, the learning rate of current step.
-    """
-    lr = optimizer.learning_rate
-    if optimizer.dynamic_lr:
-        if optimizer.is_group_lr:
-            lr = ()
-            for learning_rate in optimizer.learning_rate:
-                current_dynamic_lr = learning_rate(optimizer.global_step)
-                lr += (current_dynamic_lr,)
-        else:
-            lr = optimizer.learning_rate(optimizer.global_step)
-
-    return lr
