@@ -47,7 +47,7 @@ class TrainerState:
         self.num_training_steps = training_steps
         self._last_report_time = time.time()
         self.best_steps = 0
-        if main_metric in ['loss', 'perplexity', 'psnr']:
+        if main_metric in ['loss', 'perplexity']:
             self.neg_metric = True
         else:
             self.neg_metric = False
@@ -245,8 +245,7 @@ class DistributedTrainer:
             self.model = amp.build_train_network(self.model, self.loss_fn, level='O2')
         else:
             self.model = NetworkWithLoss(self.model, self.loss_fn, return_all=True)
-        if len(self.args.load_checkpoint_path) > 0:
-            load_ckpt(self.model, self.args.load_checkpoint_path, self.args.restore_by_prefix, self.args.prefix)
+
         if self.args.do_eval:
             metrics = self.task.get_metrics()
             self.eval_data = self.task.eval_data()
@@ -292,6 +291,8 @@ class DistributedTrainer:
             if self.args.thor:
                 from mindspore.train.train_thor import ConvertModelUtils
                 model = ConvertModelUtils().convert_to_thor_model(model, network=network, optimizer=self.optimizer)
+            if len(self.args.load_checkpoint_path) > 0:
+                load_ckpt(network, self.args.load_checkpoint_path, self.args.restore_by_prefix, self.args.prefix)
             if self.args.do_eval:
                 main_metric = self.task.main_metric
                 eval_fn = self.task.get_eval_fn(data=self.eval_data, output_dir=self.args.output_dir, rank=self.args.rank)
@@ -326,7 +327,7 @@ class DistributedTrainer:
                 load_ckpt(self.model, self.args.load_checkpoint_path, self.args.restore_by_prefix, self.args.prefix)
             model = Model(self.model, eval_network=self.model, metrics=metrics)
             main_metric = self.task.main_metric
-            # metric = self.task.metric
+            metric = self.task.metric
             eval_fn = self.task.get_eval_fn(data=self.eval_data, output_dir=self.args.output_dir, rank=self.args.local_rank)
             if eval_fn is None:
                 eval_fn = get_eval_fn(self.task, self.eval_data, self.args.output_dir, 

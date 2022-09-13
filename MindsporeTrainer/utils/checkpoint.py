@@ -24,6 +24,7 @@ def load_ckpt(model, ckpt, restore_by_prefix=True, prefix='backbone'):
     if param_dict.get('backbone.bert.dense.weight') and param_dict['backbone.bert.dense.weight'].max() < 1e-8:
         param_dict['backbone.bert.dense.weight'].set_data(initializer(TruncatedNormal(0.02), param_dict['backbone.bert.dense.weight'].shape)) 
     if not restore_by_prefix:
+        param_names = [p.name for p in params]
         unrestored = load_param_into_net(model, param_dict)
     else:
         param_names = [p.name for p in params if prefix in p.name]
