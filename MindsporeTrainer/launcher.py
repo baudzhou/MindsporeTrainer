@@ -251,7 +251,7 @@ def set_context(args):
             context.reset_auto_parallel_context()
             ms.context.set_auto_parallel_context(device_num=args.device_num, 
                                                  parallel_mode=ms.context.ParallelMode.DATA_PARALLEL,
-                                                 gradients_mean=False)
+                                                 gradients_mean=True)
 
             D.init()
         # GPU target
@@ -260,7 +260,7 @@ def set_context(args):
             context.reset_auto_parallel_context()
             ms.context.set_auto_parallel_context(device_num=D.get_device_num(),
                                                 parallel_mode=ms.context.ParallelMode.DATA_PARALLEL,
-                                                gradients_mean=False)
+                                                gradients_mean=True)
 
 
 def launch():

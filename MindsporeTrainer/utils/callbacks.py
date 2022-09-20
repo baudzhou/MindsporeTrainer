@@ -368,9 +368,9 @@ def get_lr(optimizer):
         if optimizer.is_group_lr:
             lr = ()
             for learning_rate in optimizer.learning_rate:
-                current_dynamic_lr = learning_rate(optimizer.global_step)
+                current_dynamic_lr = learning_rate(optimizer.global_step.copy())
                 lr += (current_dynamic_lr,)
         else:
-            lr = optimizer.learning_rate(optimizer.global_step)
+            lr = optimizer.learning_rate(optimizer.global_step.copy())
 
     return lr
