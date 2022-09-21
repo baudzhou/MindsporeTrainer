@@ -304,7 +304,7 @@ class TrainAccumulationAllReducePostWithLossScaleCell(nn.TrainOneStepWithLossSca
         scale_update_cell (Cell): Cell to do the loss scale. Default: None.
     """
 
-    def __init__(self, network, optimizer, scale_update_cell=None, enable_clip_grad=True, opt_overflow=False):
+    def __init__(self, network, optimizer, scale_update_cell=None, enable_clip_grad=True, accumulation_steps=1):
         super(TrainOneStepWithLossScaleCell, self).__init__(network, optimizer, scale_update_cell)
 
         self.enable_clip_grad = enable_clip_grad
@@ -315,7 +315,7 @@ class TrainAccumulationAllReducePostWithLossScaleCell(nn.TrainOneStepWithLossSca
         else:
             self.loss_scale = Parameter(Tensor(np.array([1]).astype(np.int32)), requires_grad=False)
         self.enable_tuple_broaden = True
-        self.opt_overflow = opt_overflow
+        self.accumulation_steps = accumulation_steps
         self.one = Tensor(np.array([1]).astype(np.int32))
         self.zero = Tensor(np.array([0]).astype(np.int32))
         self.local_step = Parameter(initializer(0, [1], mstype.int32))
@@ -736,14 +736,10 @@ def model_adapter(model, optimizer, scale_update_cell=None, accumulation_steps=1
             network = TrainOneStepCell(model, optimizer).set_train()
         else:
             network = TrainOneStepWithLossScaleCell(model, optimizer=optimizer, 
-                                                    scale_update_cell=scale_update_cell, 
-                                                    opt_overflow=opt_overflow).set_train()
+                                                    scale_update_cell=scale_update_cell).set_train()
     else:
         network = TrainAccumulationAllReducePostWithLossScaleCell(model, optimizer=optimizer,
-                                                scale_update_cell=scale_update_cell,
-                                                accumulation_steps=accumulation_steps,
-                                                enable_global_norm=enable_global_norm,
-                                                opt_overflow=opt_overflow,
-                                                gpu_target=gpu_target).set_train()
+                                                                  scale_update_cell=scale_update_cell,
+                                                                  accumulation_steps=accumulation_steps,).set_train()
     return network
     

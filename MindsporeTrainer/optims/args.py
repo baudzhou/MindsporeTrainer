@@ -17,6 +17,12 @@ def get_args():
             type=boolean_string,
             help="Whether to use 16-bit float precision instead of 32-bit")
 
+  group.add_argument('--amp_level',
+            default='auto',
+            type=str,
+            choices=['O0', 'O2', 'O3', 'auto'],
+            help="set amp level. ")
+
   group.add_argument('--loss_scale',
             type=float, default=16384,
             help='Loss scaling, positive power of 2 values can improve fp16 convergence.')

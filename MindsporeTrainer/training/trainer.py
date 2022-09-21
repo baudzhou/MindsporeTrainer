@@ -18,8 +18,9 @@ from mindspore.nn.wrap.loss_scale import DynamicLossScaleUpdateCell
 from mindspore.train.callback import CheckpointConfig
 from mindspore.train.serialization import load_checkpoint, load_param_into_net
 from mindspore.common import set_seed
+from mindspore.train.amp import build_train_network
 
-from MindsporeTrainer.utils import amp
+from MindsporeTrainer.utils import amp_util
 from MindsporeTrainer.utils.metrics import MSAucuracy
 from MindsporeTrainer.optims import get_optimizer
 from MindsporeTrainer.optims.adam import *
@@ -241,8 +242,12 @@ class DistributedTrainer:
 
     def run(self):
         callbacks = []
-        if self.args.fp16 and self.args.device_target != 'Ascend':
-            self.model = amp.build_train_network(self.model, self.loss_fn, level='O2')
+        if self.args.fp16:
+            if self.args.amp_level in ["O0", "O3"]:
+                _keep_bn_fp32 = False
+            else:
+                _keep_bn_fp32 = True
+            self.model = amp_util.build_train_network(self.model, self.loss_fn, level=self.args.amp_level, keep_batchnorm_fp32=_keep_bn_fp32)
         else:
             self.model = NetworkWithLoss(self.model, self.loss_fn, return_all=True)
 
@@ -277,7 +282,6 @@ class DistributedTrainer:
                                     scale_update_cell=update_cell,
                                     accumulation_steps=accumulation_steps,
                                     enable_global_norm=enable_global_norm,
-                                    opt_overflow=opt_overflow,
                                     gpu_target=self.args.device_target=='GPU')
 
             summary_dir = os.path.join(self.output_dir, 'tblogger', str(self.args.rank))
