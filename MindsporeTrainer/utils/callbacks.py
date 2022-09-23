@@ -126,8 +126,13 @@ class EvalCallBack(Callback):
     def evaluate(self, run_context):
         cb_params = run_context.original_args()
         self._last_triggered_step = cb_params.cur_step_num 
-
-        metric = self.eval_fn(self.model, 'eval', cb_params.cur_step_num)
+        metrics = []
+        for i, eval_ds in enumerate(self.eval_ds):
+            metric = self.eval_fn(self.model, eval_ds, f'eval_{i}', cb_params.cur_step_num)
+            # metric = eval_fn(model, eval_ds, f'eval_{i}', 'final')
+            logger.info(metric)
+            metrics.append(metric)
+        metric = metrics[-1]
         if self.trainer_state.neg_metric:
             metric = -metric
         if metric > self.trainer_state.best_metric:
