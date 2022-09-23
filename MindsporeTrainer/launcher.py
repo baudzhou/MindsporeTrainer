@@ -168,6 +168,7 @@ def build_argument_parser():
                         help="Whether to allreduce after accumulation of N steps or after each step, default is true.")
     # parser.add_argument("--save_checkpoint_path", type=str, default="", help="Save checkpoint path")
     parser.add_argument("--load_checkpoint_path", type=str, default="", help="Load checkpoint file path")
+    parser.add_argument("--load_opt_path", type=str, default="", help="Load optimizer file path")
     parser.add_argument("--restore_by_prefix", default=False, action='store_true', help="Load all of the parameters")
     parser.add_argument("--prefix", type=str, default="backbone", help="remove the prefix when load ckpt")
     parser.add_argument("--save_eval_steps", type=int, default=1000, help="Save checkpoint and evaluate steps, "
