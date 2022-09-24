@@ -91,8 +91,8 @@ class TrainerState:
         self._last_report_step = self.steps
 
 
-def get_eval_fn(task, data, output_dir, main_metric='acc', custom_metric_fn=None, rank=0):
-    def run_eval(model, name, prefix):
+def get_eval_fn(task, output_dir, main_metric='acc', custom_metric_fn=None, rank=0):
+    def run_eval(model, data, name, prefix):
         from MindsporeTrainer.utils.callbacks import EvalResultsCallback, LossMoniter
         rc = EvalResultsCallback(result_fn='argmax')
         res = model.eval(data, callbacks = [rc, LossMoniter(10)], dataset_sink_mode=False)
@@ -141,7 +141,7 @@ def get_eval_fn(task, data, output_dir, main_metric='acc', custom_metric_fn=None
     return run_eval
 
 
-def get_pred_fn(task, model, data, output_dir, name, prefix='final', sequence=False, dump=True):
+def get_pred_fn(task, model, data, output_dir, name, prefix='final', sequence=False, dump=True, rank=0):
     def run_predict():
         result = model.predict(data, dataset_sink_mode=True)
         if sequence:
@@ -296,12 +296,14 @@ class DistributedTrainer:
                 from mindspore.train.train_thor import ConvertModelUtils
                 model = ConvertModelUtils().convert_to_thor_model(model, network=network, optimizer=self.optimizer)
             if len(self.args.load_checkpoint_path) > 0:
-                load_ckpt(network, self.args.load_checkpoint_path, self.args.restore_by_prefix, self.args.prefix)
+                load_ckpt(network, self.args.load_checkpoint_path, self.args.restore_by_prefix, self.args.prefix, self.args.rank)
+            if len(self.args.load_opt_path) > 0:
+                load_ckpt(self.optimizer, self.args.load_opt_path, self.args.restore_by_prefix, self.args.prefix, self.args.rank)
             if self.args.do_eval:
                 main_metric = self.task.main_metric
                 eval_fn = self.task.get_eval_fn(data=self.eval_data, output_dir=self.args.output_dir, rank=self.args.rank)
                 if eval_fn is None:
-                    eval_fn = get_eval_fn(self.task, self.eval_data, self.args.output_dir, 
+                    eval_fn = get_eval_fn(self.task, self.args.output_dir, 
                                           rank=self.args.rank, main_metric=main_metric)
                 eval_callback = EvalCallBack(model, self.trainer_state, self.eval_data, 0, eval_fn, self.args.train_steps,
                                              eval_steps=self.args.save_eval_steps, rank=self.args.local_rank)
@@ -317,26 +319,29 @@ class DistributedTrainer:
                         )
 
         elif self.args.do_predict:
-            self.model = ModelForEval(self.model.net, self.eval_head)
+            self.model = ModelForEval(self.model, self.eval_head)
             if len(self.args.load_checkpoint_path) > 0:
-                load_ckpt(self.model, self.args.load_checkpoint_path, self.args.restore_by_prefix, self.args.prefix)
+                load_ckpt(self.model, self.args.load_checkpoint_path, self.args.restore_by_prefix, self.args.prefix, self.args.rank)
             model = Model(self.model)
-            pred_fn = self.task.get_pred_fn(data=self.eval_data, output_dir=self.args.output_dir, rank=self.args.local_rank)
+            pred_fn = self.task.get_pred_fn(output_dir=self.args.output_dir, rank=self.args.local_rank)
             if pred_fn is None:
                 pred_fn = get_pred_fn()
-            result = pred_fn(self.task, model, self.test_data, self.args.output_dir, 'test')
+            result = pred_fn(model, self.test_data, self.args.output_dir, 'test')
         elif self.args.do_eval and not self.args.do_train:
             self.model = ModelForEval(self.model, self.eval_head)
             if len(self.args.load_checkpoint_path) > 0:
-                load_ckpt(self.model, self.args.load_checkpoint_path, self.args.restore_by_prefix, self.args.prefix)
+                load_ckpt(self.model, self.args.load_checkpoint_path, self.args.restore_by_prefix, self.args.prefix, self.args.rank)
             model = Model(self.model, eval_network=self.model, metrics=metrics)
             main_metric = self.task.main_metric
             metric = self.task.metric
             eval_fn = self.task.get_eval_fn(data=self.eval_data, output_dir=self.args.output_dir, rank=self.args.local_rank)
             if eval_fn is None:
-                eval_fn = get_eval_fn(self.task, self.eval_data, self.args.output_dir, 
+                eval_fn = get_eval_fn(self.task, self.args.output_dir, 
                                       rank=self.args.local_rank, main_metric=main_metric)
-            eval_fn(model, 'eval', 'final')
+            # eval_fn(model, self.eval_data, 'eval', 'final')
+            for i, eval_ds in enumerate(self.eval_data):
+                metric = eval_fn(model, eval_ds, f'eval_{i}', 'final')
+                logger.info(metric)
 
     def _setup_model(self):
         if len(self.args.load_checkpoint_path) > 0:
