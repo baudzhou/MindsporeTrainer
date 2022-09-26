@@ -266,7 +266,7 @@ class DistributedTrainer:
             if self.args.enable_save_ckpt == "true" and self.args.rank % min(8, self.args.device_num) == 0:
                     config_ck = CheckpointConfig(save_checkpoint_steps=self.args.save_eval_steps,
                                                 keep_checkpoint_max=self.args.save_checkpoint_num)
-                    ckpoint_cb = ModelCheckpointWithBest(self.trainer_state, prefix=self.args.task_name,
+                    ckpoint_cb = ModelCheckpointWithBest(self.trainer_state, prefix=self.args.task_name.repace('.py', ''),
                                                         directory=self.args.output_dir, config=config_ck)
                     callbacks.append(ckpoint_cb)
             self.initialized = False
