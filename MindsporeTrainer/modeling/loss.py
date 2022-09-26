@@ -19,6 +19,7 @@ from mindspore.ops import composite as C
 import mindspore.ops as O
 from mindspore.common.tensor import Tensor
 from mindspore.common.parameter import Parameter
+from MindsporeTrainer.utils.checkpoint import load_ckpt
 
 
 class SoftmaxCrossEntropyExpand(nn.Cell):       # pylint: disable=missing-docstring
@@ -114,3 +115,65 @@ class BertPretrainingLoss(nn.Cell):
         total_loss = masked_lm_loss + next_sentence_loss
 
         return total_loss
+
+
+class PerceptualLoss(nn.Cell):
+    """
+    Provide Perceptual Losse of <Perceptual Losses for Real-Time Style Transfer and Super-Resolution>.
+
+    """
+
+    def __init__(self, init_path, content_loss_only=True):
+        super(PerceptualLoss, self).__init__()
+        self.power = P.Pow()
+
+        self.layer_config = [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M']
+        self.content_loss_only = content_loss_only
+        if content_loss_only:
+            self.layer_config = [64, 64, 'M', 128, 128]
+        self.layers = self._make_layer(self.layer_config)
+        self.layers = load_ckpt(self.layers, init_path, restore_by_prefix=False)
+        for param in self.layers.get_parameters():
+            param.requires_grad = False
+        self.mse = nn.MSELoss()
+
+    def construct(self, label_img, pred_img):
+        content = self.layers(label_img)
+        pred_content = self.layers(pred_img)
+
+        return self.mse(content, pred_content)
+
+
+    def _make_layer(self, base):
+        """Make stage network of VGG."""
+        pad_mode = 'same'
+        padding = 0
+        has_bias = False
+        batch_norm = False
+        initialize_mode = "XavierUniform"
+        has_dropout = False
+
+        layers = []
+        in_channels = 3
+        for v in base:
+            if v == 'M':
+                layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
+            else:
+                weight = 'ones'
+                if initialize_mode == "XavierUniform":
+                    weight_shape = (v, in_channels, 3, 3)
+                    weight = initializer('XavierUniform', shape=weight_shape, dtype=mstype.float32)
+
+                conv2d = nn.Conv2d(in_channels=in_channels,
+                                out_channels=v,
+                                kernel_size=3,
+                                padding=padding,
+                                pad_mode=pad_mode,
+                                has_bias=has_bias,
+                                weight_init=weight)
+                if batch_norm:
+                    layers += [conv2d, nn.BatchNorm2d(v), nn.ReLU()]
+                else:
+                    layers += [conv2d, nn.ReLU()]
+                in_channels = v
+        return nn.SequentialCell(layers)
