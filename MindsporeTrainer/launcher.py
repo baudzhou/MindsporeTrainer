@@ -219,7 +219,7 @@ def set_context(args):
     target = args.device_target
     if target == "CPU":
         args.distribute = False
-    ms.context.set_context(reserve_class_name_in_scope=False)
+    ms.context.set_context(reserve_class_name_in_scope=False, max_call_depth=10000)
     # init context
     if args.run_mode == 'GRAPH':
         if target == "Ascend":
