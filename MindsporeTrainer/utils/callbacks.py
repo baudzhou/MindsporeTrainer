@@ -7,6 +7,8 @@
 
 from ast import Not
 import time, os
+import glob
+
 import mindspore as ms
 import numpy as np
 from loguru import logger
@@ -132,6 +134,7 @@ class EvalCallBack(Callback):
         for i, eval_ds in enumerate(self.eval_ds):
             metric = self.eval_fn(self.model, eval_ds, f'eval_{i}', cb_params.cur_step_num)
             metrics.append(metric)
+        self.trainer_state.cur_metrics = [m for m in metrics]
         if self.trainer_state.neg_metric:
             metric = -metrics[-1]
         if metric > self.trainer_state.best_metric:
@@ -180,6 +183,7 @@ class StateCallback(Callback):
         self.summary_record = None
         self.train_steps = train_steps
         self.cur_step_num = 0
+        self.cur_metrics = []
 
     def step_end(self, run_context):
         cb_params = run_context.original_args()
@@ -234,6 +238,8 @@ class StateCallback(Callback):
                 self.summary_record.add_value('scalar', 'loss', ms.Tensor(loss))
                 self.summary_record.add_value('scalar', 'learning rate', ms.Tensor(lr))
                 self.summary_record.add_value('scalar', 'loss_scale', ms.Tensor(loss_scale))
+                for i, m in enumerate(self.cur_metrics):
+                    self.summary_record.add_value('scalar', f'metric{i}', ms.Tensor(m))
                 self.summary_record.record(cb_params.cur_step_num)
         if cb_params.cur_step_num >= self.train_steps:
             run_context.request_stop()
@@ -261,9 +267,11 @@ class ModelCheckpointWithBest(ModelCheckpoint):
     def save_best(self, cb_params):
         if self.trainer_state.best_metric > self.best_metric:
             self.best_metric = self.trainer_state.best_metric
-            ckpt_path = os.path.join(self._directory, 'best.ckpt')
-            if os.path.exists(ckpt_path):
-                os.remove(ckpt_path)
+            pre_best = glob.glob(os.path.join(self._directory, 'best*'))
+            for pb in pre_best:
+                if os.path.exists(pb):
+                    os.remove(pb)
+            ckpt_path = os.path.join(self._directory, f'best_{self.best_metric}.ckpt')
             self._save(cb_params, ckpt_path)
 
     def _save_ckpt(self, cb_params, force_to_save=False):
