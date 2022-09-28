@@ -178,6 +178,45 @@ class TrainOneStepCell(nn.TrainOneStepCell):
         return loss
 
 
+class TrainOneStepCellGAN(nn.Cell):
+    """Encapsulation class of AttGAN generator network training."""
+
+    def __init__(self, net, optimizer, loss, sens=1.0):
+        super().__init__()
+        self.optimizer = optimizer
+        self.net = net
+        self.loss = loss
+        self.grad = ms.ops.GradOperation(get_by_list=True, sens_param=True)
+
+        self.sens = sens
+        self.weights = optimizer.parameters
+        # self.network = GenWithLossCell(generator)
+        self.net.add_flags(defer_inline=True)
+
+        self.reducer_flag = False
+        self.grad_reducer = F.identity
+        self.parallel_mode = _get_parallel_mode()
+
+        if self.parallel_mode in (ParallelMode.DATA_PARALLEL, ParallelMode.HYBRID_PARALLEL):
+            self.reducer_flag = True
+        if self.reducer_flag:
+            mean = _get_gradients_mean()
+            degree = _get_device_num()
+            self.grad_reducer = DistributedGradReducer(self.weights, mean, degree)
+
+    def construct(self, *inputs):
+        weights = self.weights
+        outputs = self.net(*inputs)
+        loss_dict = self.loss(inputs + outputs)
+        loss = loss_dict['loss']
+        sens = P.Fill()(P.DType()(loss), P.Shape()(loss), self.sens)
+        grads = self.grad(self.network, weights)(*inputs, sens)
+        if self.reducer_flag:
+            grads = self.grad_reducer(grads)
+        loss_dict['loss'] = F.depend(loss, self.optimizer(grads))
+        return loss_dict
+
+
 grad_scale = C.MultitypeFuncGraph("grad_scale")
 reciprocal = P.Reciprocal()
 

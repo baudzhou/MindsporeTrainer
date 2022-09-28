@@ -13,7 +13,6 @@ from collections import defaultdict
 from loguru import logger
 
 from mindspore.communication.management import get_rank
-from mindspore.train.model import Model, RunContext, _transfer_tensor_to_tuple, _is_role_pserver
 from mindspore.nn.wrap.loss_scale import DynamicLossScaleUpdateCell
 from mindspore.train.callback import CheckpointConfig
 from mindspore.train.serialization import load_checkpoint, load_param_into_net
@@ -28,6 +27,7 @@ from MindsporeTrainer.modeling.modeling_adapter import *
 from MindsporeTrainer.task import Task
 from MindsporeTrainer.utils.callbacks import EvalCallBack, StateCallback, ModelCheckpointWithBest
 from MindsporeTrainer.utils.checkpoint import load_ckpt
+from MindsporeTrainer.training.model_for_GAN import TrainerModel
 
 __all__ = ['DistributedTrainer', 'set_random_seed']
 
@@ -35,88 +35,6 @@ def set_random_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
     set_seed(seed)
-
-
-class TrainerModel(Model):
-    def __init__(self, network, loss_fn=None, optimizer=None, metrics=None, eval_network=None, eval_indexes=None, amp_level="O0", boost_level="O0", **kwargs):
-        super().__init__(network, loss_fn, optimizer, metrics, eval_network, eval_indexes, amp_level, boost_level, **kwargs)
-        self.generator = network[0]
-        self.discriminator = network[1]
-        if len(network) > 2:
-            self.extractor = network[2]
-
-    def _train_process(self, epoch, train_dataset, list_callback=None, cb_params=None):
-        """
-        Training process. The data would be passed to network directly.
-
-        Args:
-            epoch (int): Total number of iterations on the data.
-            train_dataset (Dataset): A training dataset iterator. If there is no
-                                     loss_fn, a tuple with multiple data (data1, data2, data3, ...) should be
-                                     returned and passed to the network. Otherwise, a tuple (data, label) should
-                                     be returned. The data and label would be passed to the network and loss
-                                     function respectively.
-            list_callback (Callback): Executor of callback list. Default: None.
-            cb_params (_InternalCallbackParam): Callback parameters. Default: None.
-        """
-        dataset_helper, _ = self._exec_preprocess(is_train=True,
-                                                  dataset=train_dataset,
-                                                  dataset_sink_mode=False,
-                                                  epoch_num=epoch)
-        cb_params.cur_step_num = 0
-        cb_params.dataset_sink_mode = False
-        run_context = RunContext(cb_params)
-        list_callback.begin(run_context)
-        # used to stop training for early stop, such as stopAtTIme or stopATStep
-        should_stop = False
-        for i in range(epoch):
-            cb_params.cur_epoch_num = i + 1
-
-            list_callback.epoch_begin(run_context)
-
-            for next_element in dataset_helper:
-                len_element = len(next_element)
-                next_element = _transfer_tensor_to_tuple(next_element)
-                if self._loss_fn and len_element != 2:
-                    raise ValueError("When 'loss_fn' is not None, 'train_dataset' should return "
-                                     "two elements, but got {}, please check the number of elements "
-                                     "returned by 'train_dataset'".format(len_element))
-                cb_params.cur_step_num += 1
-
-                cb_params.train_dataset_element = next_element
-                list_callback.step_begin(run_context)
-                outputs = self._train_network(*next_element)
-                cb_params.net_outputs = outputs
-                if self._loss_scale_manager and self._loss_scale_manager.get_drop_overflow_update():
-                    _, overflow, _ = outputs
-                    overflow = np.all(overflow.asnumpy())
-                    self._loss_scale_manager.update_loss_scale(overflow)
-
-                list_callback.step_end(run_context)
-                if _is_role_pserver():
-                    os._exit(0)
-                should_stop = should_stop or run_context.get_stop_requested()
-                if should_stop:
-                    break
-
-            train_dataset.reset()
-
-            # if param is cache enable, flush data from cache to host before epoch end
-            self._flush_from_cache(cb_params)
-
-            list_callback.epoch_end(run_context)
-            should_stop = should_stop or run_context.get_stop_requested()
-            if should_stop:
-                break
-
-        list_callback.end(run_context)
-
-    def _build_train_network(self):
-        self._network = self.generator
-        self.generator = super()._build_train_network()
-        self._network = self.discriminator
-        self.discriminator = super()._build_train_network()
-
 
 class TrainerState:
     def __init__(self, training_steps, name=None, main_metric=''):
@@ -329,9 +247,9 @@ class DistributedTrainer:
                 _keep_bn_fp32 = False
             else:
                 _keep_bn_fp32 = True
-            self.model = amp_util.build_train_network(self.model, self.loss_fn, level=self.args.amp_level, keep_batchnorm_fp32=_keep_bn_fp32)
+            self.model = [amp_util.build_train_network(m, self.loss_fn, level=self.args.amp_level, keep_batchnorm_fp32=_keep_bn_fp32) for m in self.model]
         else:
-            self.model = NetworkWithLoss(self.model, self.loss_fn, return_all=True)
+            self.model = [NetworkWithLoss(m, self.loss_fn, return_all=True) for m in self.model]
 
         if self.args.do_eval:
             metrics = self.task.get_metrics()
@@ -343,8 +261,9 @@ class DistributedTrainer:
             metrics = None
 
         if self.args.do_train:
-            self.optimizer, opt_overflow = self.optimizer_fn(self.args, self.model, opt_name=self.task.optimizer_name)
-
+            opt_gen = self.optimizer_fn(self.args, self.model[0], opt_name=self.task.optimizer_name, model='gen')
+            opt_dis = self.optimizer_fn(self.args, self.model[1], opt_name=self.task.optimizer_name, model='gen')
+            self.optimizer = [opt_gen, opt_dis]
             if self.args.enable_save_ckpt == "true" and self.args.rank % min(8, self.args.device_num) == 0:
                     config_ck = CheckpointConfig(save_checkpoint_steps=self.args.save_eval_steps,
                                                 keep_checkpoint_max=self.args.save_checkpoint_num)
@@ -360,27 +279,35 @@ class DistributedTrainer:
                 update_cell = None
             accumulation_steps = self.args.accumulation_steps
             enable_global_norm = self.args.enable_global_norm
-            network = model_adapter(self.model, optimizer=self.optimizer,
+            
+            network_gen = model_adapter(self.model[0], optimizer=self.optimizer[0],
                                     scale_update_cell=update_cell,
                                     accumulation_steps=accumulation_steps,
                                     enable_global_norm=enable_global_norm,
                                     gpu_target=self.args.device_target=='GPU')
-
+            network_dis = model_adapter(self.model[1], optimizer=self.optimizer[1],
+                                    scale_update_cell=update_cell,
+                                    accumulation_steps=accumulation_steps,
+                                    enable_global_norm=enable_global_norm,
+                                    gpu_target=self.args.device_target=='GPU')
+            network = [network_gen, network_dis]
             summary_dir = os.path.join(self.output_dir, 'tblogger', str(self.args.rank))
             callbacks.append(StateCallback(self.trainer_state, self.optimizer, 
                                            report_steps=self.args.report_interval,
                                            summary_dir=summary_dir, train_steps=self.args.train_steps))
             if self.args.do_eval:
-                self.eval_model = ModelForEval(self.model, self.eval_head, fp16=self.args.fp16)
+                self.eval_model = ModelForEval(self.model[0], self.eval_head, fp16=self.args.fp16)
 
-            model = Model(network, eval_network=self.eval_model, metrics=metrics)
+            model = TrainerModel(network, eval_network=self.eval_model, metrics=metrics)
             if self.args.thor:
                 from mindspore.train.train_thor import ConvertModelUtils
                 model = ConvertModelUtils().convert_to_thor_model(model, network=network, optimizer=self.optimizer)
             if len(self.args.load_checkpoint_path) > 0:
-                load_ckpt(network, self.args.load_checkpoint_path, self.args.restore_by_prefix, self.args.prefix, self.args.rank)
+                load_ckpt(network_gen, self.args.load_checkpoint_path[0], self.args.restore_by_prefix, self.args.prefix, self.args.rank)
+                load_ckpt(network_dis, self.args.load_checkpoint_path[1], self.args.restore_by_prefix, self.args.prefix, self.args.rank)
             if len(self.args.load_opt_path) > 0:
-                load_ckpt(self.optimizer, self.args.load_opt_path, self.args.restore_by_prefix, self.args.prefix, self.args.rank)
+                load_ckpt(self.optimizer[0], self.args.load_opt_path[0], self.args.restore_by_prefix, self.args.prefix, self.args.rank)
+                load_ckpt(self.optimizer[1], self.args.load_opt_path[1], self.args.restore_by_prefix, self.args.prefix, self.args.rank)
             if self.args.do_eval:
                 main_metric = self.task.main_metric
                 eval_fn = self.task.get_eval_fn(data=self.eval_data, output_dir=self.args.output_dir, rank=self.args.rank)
@@ -404,7 +331,7 @@ class DistributedTrainer:
             self.model = ModelForEval(self.model, self.eval_head)
             if len(self.args.load_checkpoint_path) > 0:
                 load_ckpt(self.model, self.args.load_checkpoint_path, self.args.restore_by_prefix, self.args.prefix, self.args.rank)
-            model = Model(self.model)
+            model = TrainerModel(self.model)
             pred_fn = self.task.get_pred_fn(output_dir=self.args.output_dir, rank=self.args.local_rank)
             if pred_fn is None:
                 pred_fn = get_pred_fn()
@@ -413,7 +340,7 @@ class DistributedTrainer:
             self.model = ModelForEval(self.model, self.eval_head)
             if len(self.args.load_checkpoint_path) > 0:
                 load_ckpt(self.model, self.args.load_checkpoint_path, self.args.restore_by_prefix, self.args.prefix, self.args.rank)
-            model = Model(self.model, eval_network=self.model, metrics=metrics)
+            model = TrainerModel(self.model, eval_network=self.model, metrics=metrics)
             main_metric = self.task.main_metric
             metric = self.task.metric
             eval_fn = self.task.get_eval_fn(data=self.eval_data, output_dir=self.args.output_dir, rank=self.args.local_rank)

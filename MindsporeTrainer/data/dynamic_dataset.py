@@ -17,7 +17,7 @@ import mindspore.common.dtype as mstype
 logger=loguru.logger
 
 def create_dynamic_dataset(examples, feature_fn, batch_size, output_columns, column_names=["example", "label"],
-                           buffer_size=1000, repeat=1, num_workers=1, num_shards=None,
+                           buffer_size=1000, repeat=1, num_workers=1, num_shards=None, python_multiprocessing=True,
                            shard_id=None, type_cast_op=[C.c_transforms.TypeCast(mstype.int32)], shuffle=True):
     '''
         Provide dynamic data set.
@@ -33,17 +33,20 @@ def create_dynamic_dataset(examples, feature_fn, batch_size, output_columns, col
                                   num_parallel_workers=num_workers
                                 )
     # test_feature_fn(examples, feature_fn)
-    for fn, name in feature_fn:
+    for fn, input_column, output_column in feature_fn:
         dataset = dataset.map(fn,
-                              input_columns=name,
-                              output_columns=name,
-                              column_order=output_columns,
-                              num_parallel_workers=num_workers
+                              input_columns=input_column,
+                              output_columns=output_column,
+                              column_order=output_column,
+                              num_parallel_workers=num_workers,
+                              python_multiprocessing=python_multiprocessing
                             )
     if type_cast_op is not None:
         for op, col in type_cast_op:
             dataset = dataset.map(operations=op, input_columns=col, num_parallel_workers=num_workers)
-    dataset = dataset.batch(batch_size=batch_size, drop_remainder=True, num_parallel_workers=num_workers)
+    dataset = dataset.batch(batch_size=batch_size, drop_remainder=True, 
+                            num_parallel_workers=num_workers, output_columns=output_columns,
+                            column_order=output_columns)
     # print_example(dataset)
     return dataset
 

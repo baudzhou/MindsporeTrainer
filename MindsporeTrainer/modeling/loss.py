@@ -131,6 +131,8 @@ class PerceptualLoss(nn.Cell):
         self.content_loss_only = content_loss_only
         if content_loss_only:
             self.layer_config = [64, 64, 'M', 128, 128]
+        else:
+            self.layer_config = [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M']
         self.layers = self._make_layer(self.layer_config)
         self.layers = load_ckpt(self.layers, init_path, restore_by_prefix=False)
         for param in self.layers.get_parameters():
