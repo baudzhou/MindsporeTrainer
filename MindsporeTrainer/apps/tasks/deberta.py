@@ -27,9 +27,9 @@ class DEBERTATask(TransformerTask):
     def __init__(self, args, **kwargs):
         super().__init__(args, **kwargs)
         self.max_seq_len = 512
-        self.model_config = 'data/model_config.json'
+        self.model_config = 'config.json'
         self.vocab_type = 'BERT'
-        self.vocab_path = 'data/vocab.txt'
+        self.vocab_path = 'vocab.txt'
         self.metric = 'bert'
         self.main_metric = 'perplexity'
         self.optimizer_name = 'Lamb'
@@ -41,13 +41,14 @@ class DEBERTATask(TransformerTask):
         # data = ExampleSet(data)
         output_columns = ["input_ids", "input_mask", "token_type_id", "next_sentence_labels",
                                     "masked_lm_positions", "masked_lm_ids", "masked_lm_weights"]
-        return create_dynamic_dataset(data, [self.get_feature_fn()], 
+        return create_dynamic_dataset(data, [[self.get_feature_fn(), ["example"], output_columns]], 
                                       batch_size=self.train_batch_size,
                                       output_columns=output_columns, 
                                       repeat=self.num_train_epochs,
                                       num_workers=self.data_workers,
                                       num_shards=self.rank_size, 
-                                      shard_id=self.rank_id)
+                                      shard_id=self.rank_id,
+                                      type_cast_op=None)
 
     def eval_data(self, **kwargs):
         data_path = os.path.join(self.data_dir, 'eval.txt')
@@ -55,13 +56,14 @@ class DEBERTATask(TransformerTask):
 
         output_columns = ["input_ids", "input_mask", "token_type_id", "next_sentence_labels",
                                     "masked_lm_positions", "masked_lm_ids", "masked_lm_weights"]
-        return create_dynamic_dataset(data, self.get_feature_fn(), 
+        return create_dynamic_dataset(data, [[self.get_feature_fn(), ["example"], output_columns]], 
                                       batch_size=self.eval_batch_size,
                                       output_columns=output_columns, 
                                       repeat=1,
                                       num_workers=self.data_workers, 
                                       num_shards=self.rank_size, 
-                                      shard_id=self.rank_id)
+                                      shard_id=self.rank_id,
+                                      type_cast_op=None)
 
     def get_metrics(self, **kwargs):
         """Calcuate metrics based on prediction results"""
@@ -70,10 +72,9 @@ class DEBERTATask(TransformerTask):
             )
 
     def get_eval_fn(self, **kwargs):
-        data = kwargs.get('data')
-        if data is None:
-            data = self.eval_data(**kwargs)
-        def run_eval(model, name, prefix):
+        # data = kwargs.get('data')
+
+        def run_eval(model, data, name, prefix):
             '''
             args: 
                 model: Model instance
@@ -82,6 +83,8 @@ class DEBERTATask(TransformerTask):
             return:
                 float, main metric of this task, used to save best metric model
             '''
+            if data is None:
+                data = self.eval_data(**kwargs)
             res = model.eval(data, dataset_sink_mode=False)
             res = res['bert']
             main_metric = res[self.main_metric]

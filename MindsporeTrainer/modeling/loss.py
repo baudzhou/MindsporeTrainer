@@ -109,7 +109,7 @@ class BertPretrainingLoss(nn.Cell):
                 one_hot_labels * seq_relationship_score, self.last_idx))
             next_sentence_loss = self.reduce_mean(per_example_loss, self.last_idx)
         else:
-            next_sentence_loss = 0
+            next_sentence_loss = Tensor(0.0, dtype=mstype.float32)
 
         # total_loss
         total_loss = masked_lm_loss + next_sentence_loss

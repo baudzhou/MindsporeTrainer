@@ -312,6 +312,14 @@ class DisentangledSelfAttention(nn.Cell):
         self.trans_shape_position = (1, 2, 0, 3)
         self.multiply_data = -10000.0
         self.scores_mul = 1.0 / math.sqrt(float(self.attention_head_size ))
+        scale_factor = 1
+        if 'c2p' in self.pos_att_type:
+            scale_factor += 1
+        if 'p2c' in self.pos_att_type:
+            scale_factor += 1
+        if 'p2p' in self.pos_att_type:
+            scale_factor += 1
+        self.scale_deberta = 1 / numpy.sqrt(self.attention_head_size * scale_factor)
         self.reshape = P.Reshape()
         self.shape_from_2d = (-1, self.config.hidden_size)
         self.shape_to_2d = (-1, self.config.hidden_size)
@@ -347,21 +355,14 @@ class DisentangledSelfAttention(nn.Cell):
         query_layer = self.transpose_for_scores(query_states, self.query_proj, self.num_attention_heads, self.shape_from_2d, shape_from)
         key_layer = self.transpose_for_scores(hidden_states, self.key_proj, self.num_attention_heads, self.shape_to_2d, shape_from)
         value_layer = self.transpose_for_scores(hidden_states, self.value_proj, self.num_attention_heads, self.shape_to_2d, shape_from)
-       
+
         rel_att = None
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        scale_factor = 1
-        if 'c2p' in self.pos_att_type:
-            scale_factor += 1
-        if 'p2c' in self.pos_att_type:
-            scale_factor += 1
-        if 'p2p' in self.pos_att_type:
-            scale_factor += 1
-        # scale = 1 / numpy.sqrt(query_layer.shape[-1] * scale_factor)
-        attention_scores = self.matmul(query_layer, key_layer.transpose(0, 2, 1) * self.scores_mul)
-        # if self.relative_attention:
-        #     rel_embeddings = self.pos_dropout(rel_embeddings)
-        #     rel_att = self.disentangled_attention_bias(query_layer, key_layer, relative_pos, rel_embeddings, scale_factor)
+
+        attention_scores = self.matmul_trans_b(query_layer, key_layer * self.scale_deberta)
+        if self.relative_attention:
+            rel_embeddings = self.pos_dropout(rel_embeddings)
+            rel_att = self.disentangled_attention_bias(query_layer, key_layer, relative_pos, rel_embeddings)
 
         if rel_att is not None:
             attention_scores = (attention_scores + rel_att)
@@ -384,8 +385,7 @@ class DisentangledSelfAttention(nn.Cell):
 
         return context_layer
 
-
-    def disentangled_attention_bias(self, query_layer, key_layer, relative_pos, rel_embeddings, scale_factor):
+    def disentangled_attention_bias(self, query_layer, key_layer, relative_pos, rel_embeddings):
         if relative_pos is None:
             q = query_layer.shape[-2]
             relative_pos = build_relative_position(q, key_layer.shape[-2], 
@@ -400,7 +400,7 @@ class DisentangledSelfAttention(nn.Cell):
             raise ValueError(f'Relative postion ids must be of dim 2 or 3 or 4. {relative_pos.ndim}')
 
         att_span = self.pos_ebd_size
-
+        score = 0
         rel_embeddings = F.expand_dims(rel_embeddings[self.pos_ebd_size - att_span: self.pos_ebd_size + att_span, :], 0)#.repeat(query_layer.shape[0]//self.num_attention_heads, 1, 1)
         if self.share_att_key:
             pos_query_layer = self.transpose_for_scores(rel_embeddings, 
@@ -420,6 +420,7 @@ class DisentangledSelfAttention(nn.Cell):
             #     .repeat(query_layer.shape[0]//self.num_attention_heads, 1, 1) #.split(self.all_head_size, dim=-1)
             # pos_key_layer = self.transpose_for_scores(self.key_proj(rel_embeddings), self.num_attention_heads)\
             #     .repeat(query_layer.shape[0]//self.num_attention_heads, 1, 1) #.split(self.all_head_size, dim=-1)
+
         else:
             if 'c2p' in self.pos_att_type or 'p2p' in self.pos_att_type:
                 pos_key_layer = self.transpose_for_scores(rel_embeddings, 
@@ -431,6 +432,22 @@ class DisentangledSelfAttention(nn.Cell):
 
                 # pos_key_layer = self.transpose_for_scores(self.pos_key_proj(rel_embeddings), self.num_attention_heads)\
                 #     .repeat(query_layer.shape[0]//self.num_attention_heads, 1, 1) #.split(self.all_head_size, dim=-1)
+                # content->position
+                if 'c2p' in self.pos_att_type:
+                    # scale = 1 / math.sqrt(self.attention_head_size * scale_factor)
+                    pos_key_layer = pos_key_layer.transpose(0, 2, 1)
+                    pos_key_layer = self.cast(pos_key_layer, query_layer.dtype)
+                    c2p_att = self.matmul(query_layer, pos_key_layer * self.scale_deberta)
+                    c2p_pos = O.clip_by_value(relative_pos + att_span, 0, att_span * 2 - 1)
+                    index = O.BroadcastTo((query_layer.shape[0], query_layer.shape[1], relative_pos.shape[-1]))(c2p_pos.squeeze(0))
+                    c2p_att = self.gather(c2p_att, -1, index)
+                    score += c2p_att
+                else:
+                    c2p_pos = relative_pos
+            else:
+                pos_key_layer = O.Zeros()(query_layer.shape[0], query_layer.shape[1], self.attention_head_size)
+                c2p_pos = relative_pos
+            
             if 'p2c' in self.pos_att_type or 'p2p' in self.pos_att_type:
                 pos_query_layer = self.transpose_for_scores(rel_embeddings, 
                                                             self.pos_query_proj, 
@@ -441,51 +458,46 @@ class DisentangledSelfAttention(nn.Cell):
                 
                 # pos_query_layer = self.transpose_for_scores(self.pos_query_proj(rel_embeddings), self.num_attention_heads)\
                 #     .repeat(query_layer.shape[0]//self.num_attention_heads, 1, 1) #.split(self.all_head_size, dim=-1)
-
-        score = 0
-        # content->position
-        if 'c2p' in self.pos_att_type:
-            scale = 1 / math.sqrt(pos_key_layer.shape[-1] * scale_factor)
-            c2p_att = self.matmul(query_layer, pos_key_layer.transpose(0, 2, 1).astype(query_layer.dtype) * scale)
-            c2p_pos = O.clip_by_value(relative_pos + att_span, 0, att_span * 2 - 1)
-            index = O.BroadcastTo((query_layer.shape[0], query_layer.shape[1], relative_pos.shape[-1]))(c2p_pos.squeeze(0))
-            c2p_att = self.gather(c2p_att, -1, index)
-            score += c2p_att
-
-        # position->content
-        if 'p2c' in self.pos_att_type or 'p2p' in self.pos_att_type:
-            scale = 1 / math.sqrt(pos_query_layer.shape[-1]*scale_factor)
-            if key_layer.shape[-2] != query_layer.shape[-2]:
-                r_pos = build_relative_position(key_layer.shape[-2], key_layer.shape[-2], 
-                                                bucket_size = self.position_buckets, 
-                                                max_position = self.max_relative_positions)
-                r_pos = F.expand_dims(r_pos, 0)
             else:
-                r_pos = relative_pos
+                pos_query_layer = O.Zeros()(query_layer.shape[0], query_layer.shape[1], self.attention_head_size)
+            # position->content
+            if 'p2c' in self.pos_att_type or 'p2p' in self.pos_att_type:
+                # scale = 1 / math.sqrt(self.attention_head_size * scale_factor)
+                if key_layer.shape[-2] != query_layer.shape[-2]:
+                    r_pos = build_relative_position(key_layer.shape[-2], key_layer.shape[-2], 
+                                                    bucket_size = self.position_buckets, 
+                                                    max_position = self.max_relative_positions)
+                    r_pos = F.expand_dims(r_pos, 0)
+                else:
+                    r_pos = relative_pos
 
-            p2c_pos = O.clip_by_value(-r_pos + att_span, 0, att_span * 2 - 1)
-            if query_layer.shape[-2] != key_layer.shape[-2]:
-                pos_index = F.expand_dims(relative_pos[:, :, :, 0], -1)
+                p2c_pos = O.clip_by_value(-r_pos + att_span, 0, att_span * 2 - 1)
+                if query_layer.shape[-2] != key_layer.shape[-2]:
+                    pos_index = F.expand_dims(relative_pos[:, :, :, 0], -1)
+                else:
+                    pos_index = relative_pos[:, :, :, 0]
+            # else:
+            #     scale = self.scores_mul
 
-        if 'p2c' in self.pos_att_type:
-            p2c_att = self.matmul(key_layer, pos_query_layer.transpose(0, 2, 1).astype(key_layer.dtype) * scale)
-            index = O.BroadcastTo((query_layer.shape[0], key_layer.shape[-2], key_layer.shape[-2]))(p2c_pos.squeeze(0))
-            p2c_att = self.gather(p2c_att, -1, index).transpose(0, 2, 1)
-            if query_layer.shape[-2] != key_layer.shape[-2]:
-                index = O.BroadcastTo(p2c_att.shape[:2] + (pos_index.shape[-2], key_layer.shape[-2]))(p2c_att)
-                p2c_att = self.gather(p2c_att, -2, index)
-            score += p2c_att
+                if 'p2c' in self.pos_att_type:
+                    p2c_att = self.matmul(key_layer, pos_query_layer.transpose(0, 2, 1).astype(key_layer.dtype) * self.scale_deberta)
+                    index = O.BroadcastTo((query_layer.shape[0], key_layer.shape[-2], key_layer.shape[-2]))(p2c_pos.squeeze(0))
+                    p2c_att = self.gather(p2c_att, -1, index).transpose(0, 2, 1)
+                    if query_layer.shape[-2] != key_layer.shape[-2]:
+                        index = O.BroadcastTo(p2c_att.shape[:2] + (pos_index.shape[-2], key_layer.shape[-2]))(p2c_att)
+                        p2c_att = self.gather(p2c_att, -2, index)
+                    score += p2c_att
 
-        # position->position
-        if 'p2p' in self.pos_att_type:
-            pos_query = pos_query_layer[:, :, att_span:, :]
-            p2p_att = self.matmul(pos_query, pos_key_layer.transpose(0, 2, 1))
-            p2p_att = O.BroadcastTo(query_layer.shape[:2] + p2p_att.shape[2:])(p2p_att)
-            if query_layer.shape[-2] != key_layer.shape[-2]:
-                index = O.BroadcastTo(query_layer.shape[:2] + (pos_index.shape[-2], p2p_att.shape[-1]))(pos_index)
-                p2p_att = self.gather(p2p_att, -2, index)
-            p2p_att = self.gather(p2p_att, -1, O.BroadcastTo((query_layer.shape[0], query_layer.shape[1], query_layer.shape[2], relative_pos.shape[-1])))(c2p_pos)
-            score += p2p_att
+                # position->position
+                if 'p2p' in self.pos_att_type:
+                    pos_query = pos_query_layer[:, :, att_span:, :]
+                    p2p_att = self.matmul(pos_query, pos_key_layer.transpose(0, 2, 1))
+                    p2p_att = O.BroadcastTo(query_layer.shape[:2] + p2p_att.shape[2:])(p2p_att)
+                    if query_layer.shape[-2] != key_layer.shape[-2]:
+                        index = O.BroadcastTo(query_layer.shape[:2] + (pos_index.shape[-2], p2p_att.shape[-1]))(pos_index)
+                        p2p_att = self.gather(p2p_att, -2, index)
+                    p2p_att = self.gather(p2p_att, -1, O.BroadcastTo((query_layer.shape[0], query_layer.shape[1], query_layer.shape[2], relative_pos.shape[-1])))(c2p_pos)
+                    score += p2p_att
 
         return score
 
@@ -1318,7 +1330,7 @@ class BertEvalHead(nn.Cell):
                 one_hot_labels * seq_relationship_score, self.last_idx))
             next_sentence_loss = self.reduce_mean(per_example_loss, self.last_idx)
         else:
-            next_sentence_loss = 0
+            next_sentence_loss = Tensor(0.0, dtype=mstype.float32)
 
         # total_loss
         total_loss = masked_lm_loss + next_sentence_loss

@@ -10,7 +10,7 @@ import numpy as np
 import numpy as np
 import pickle
 
-__all__=['ExampleInstance', 'example_to_feature', 'ExampleSet']
+__all__=['ExampleInstance', 'ExampleSet']
 
 class ExampleInstance:
   def __init__(self, segments, label=None,  **kwv):
