@@ -23,7 +23,6 @@ from loguru import logger
 
 from MindsporeTrainer.utils import *
 from MindsporeTrainer.task import load_tasks, get_task
-from MindsporeTrainer.training import DistributedTrainer
 from MindsporeTrainer.training import get_args as get_training_args
 from MindsporeTrainer.optims import get_args as get_optims_args
 from MindsporeTrainer.modeling.modeling_adapter import *
@@ -137,7 +136,7 @@ def build_argument_parser():
     parser.add_argument('--device_target', 
                         type=str, 
                         default='Ascend', 
-                        choices=['Ascend', 'GPU'],
+                        choices=['Ascend', 'GPU', 'CPU'],
                         help='device where the code will be implemented. (Default: Ascend)')
     parser.add_argument('--run_mode', 
                         type=str, 
@@ -188,6 +187,10 @@ def build_argument_parser():
                         default=False,
                         action='store_true',
                         help="Whether to convert model to thor optimizer")
+    parser.add_argument("--GAN", 
+                        default=False,
+                        action='store_true',
+                        help="Whether to convert model to thor optimizer")
     return parser
 
 
@@ -210,8 +213,14 @@ def main(args):
             args.train_steps = args.train_steps * args.accumulation_steps
 
     task = get_task(args.task_name)(args)
-    trainer = DistributedTrainer(args, task)
-    trainer.run()
+    if args.GAN:
+        from MindsporeTrainer.training import DistributedTrainerForGAN
+        trainer = DistributedTrainerForGAN(args, task)
+        trainer.run()
+    else:
+        from MindsporeTrainer.training import DistributedTrainer
+        trainer = DistributedTrainer(args, task)
+        trainer.run()
 
 
 def set_context(args):

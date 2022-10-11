@@ -13,6 +13,7 @@ import loguru
 import numpy as np
 import mindspore.dataset as ds
 import mindspore.dataset.transforms as C
+from mindspore.dataset.vision.c_transforms import ImageTensorOperation
 import mindspore.common.dtype as mstype
 logger=loguru.logger
 
@@ -34,6 +35,8 @@ def create_dynamic_dataset(examples, feature_fn, batch_size, output_columns, col
                                 )
     # test_feature_fn(examples, feature_fn)
     for fn, input_column, output_column in feature_fn:
+        if isinstance(fn, ImageTensorOperation):
+            output_column = None
         dataset = dataset.map(fn,
                               input_columns=input_column,
                               output_columns=output_column,
@@ -41,6 +44,7 @@ def create_dynamic_dataset(examples, feature_fn, batch_size, output_columns, col
                               num_parallel_workers=num_workers,
                               python_multiprocessing=python_multiprocessing
                             )
+    # print_example(dataset)
     if type_cast_op is not None:
         for op, col in type_cast_op:
             dataset = dataset.map(operations=op, input_columns=col, num_parallel_workers=num_workers)

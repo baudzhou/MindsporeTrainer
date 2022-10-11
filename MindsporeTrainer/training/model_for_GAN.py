@@ -15,7 +15,8 @@ from loguru import logger
 from mindspore.communication.management import get_rank
 from mindspore.train.model import Model, RunContext, _transfer_tensor_to_tuple, _is_role_pserver,\
                                   _save_final_ckpt, Validator, _InternalCallbackParam, context, _StepSync, \
-                                  _enable_distributed_mindrt, _is_role_sched, _cache_enable, _CallbackManager
+                                  _enable_distributed_mindrt, _is_role_sched, _cache_enable, _CallbackManager, \
+                                  DatasetHelper, connect_network_with_dataset, _set_training_dataset, ParallelMode
 from mindspore.common import set_seed
 
 
@@ -30,11 +31,15 @@ def set_random_seed(seed):
 class TrainerModel(Model):
     def __init__(self, network, loss_fn=None, optimizer=None, metrics=None, eval_network=None, eval_indexes=None, amp_level="O0", boost_level="O0",
                  gen_update_steps=1, dis_update_steps=1,**kwargs):
-        super().__init__(network, loss_fn, optimizer, metrics, eval_network, eval_indexes, amp_level, boost_level, **kwargs)
         self.generator = network[0]
         self.discriminator = network[1]
         self.gen_update_steps = gen_update_steps
         self.dis_update_steps = dis_update_steps
+        if optimizer is not None:
+            self.gen_optimizer = optimizer[0]
+            self.dis_optimizer = optimizer[1]
+        super().__init__(network, loss_fn, optimizer, metrics, eval_network, eval_indexes, amp_level, boost_level, **kwargs)
+
 
     def _train_process(self, epoch, train_dataset, list_callback=None, cb_params=None):
         """
@@ -152,10 +157,10 @@ class TrainerModel(Model):
         else:
             cb_params.batch_num = train_dataset.get_dataset_size()
         cb_params.mode = "train"
-        cb_params.gen_loss_fn = self.gen_loss_fn
-        cb_params.dis_loss_fn = self.dis_loss_fn
-        cb_params.gen_optimizer = self.gen_optimizer
-        cb_params.dis_optimizer = self.dis_optimizer
+        # cb_params.gen_loss_fn = self.gen_loss_fn
+        # cb_params.dis_loss_fn = self.dis_loss_fn
+        # cb_params.gen_optimizer = self.gen_optimizer
+        # cb_params.dis_optimizer = self.dis_optimizer
         cb_params.parallel_mode = self._parallel_mode
         cb_params.device_number = self._device_number
         cb_params.train_dataset = train_dataset
@@ -178,7 +183,7 @@ class TrainerModel(Model):
         with _CallbackManager(callbacks) as list_callback:
             self._check_reuse_dataset(train_dataset)
             if not dataset_sink_mode:
-                self._train_process(epoch, train_dataset, list_callback, cb_params, initial_epoch, valid_infos)
+                self._train_process(epoch, train_dataset, list_callback, cb_params) #, initial_epoch, valid_infos
             elif context.get_context("device_target") == "CPU":
                 logger.info("The CPU cannot support dataset sink mode currently."
                             "So the training process will be performed with dataset not sink.")
@@ -186,3 +191,37 @@ class TrainerModel(Model):
             else:
                 self._train_dataset_sink_process(epoch, train_dataset, list_callback,
                                                  cb_params, sink_size, initial_epoch, valid_infos)
+
+    def _exec_preprocess(self, is_train, dataset, dataset_sink_mode, sink_size=-1, epoch_num=1, dataset_helper=None):
+        """Initializes dataset."""
+        if is_train:
+            # network = self._train_network
+            phase = 'train'
+        else:
+            network = self._eval_network
+            phase = 'eval'
+
+        if dataset_sink_mode and not is_train:
+            dataset.__loop_size__ = 1
+
+        if dataset_helper is None:
+            dataset_helper = DatasetHelper(dataset, dataset_sink_mode, sink_size, epoch_num)
+
+        if dataset_sink_mode:
+            network = connect_network_with_dataset(network, dataset_helper)
+
+        if is_train:
+            _set_training_dataset(dataset_helper)
+
+
+        self.generator.set_train(is_train)
+        self.discriminator.set_train(is_train)
+        self.generator.phase = phase
+        self.discriminator.phase = phase
+        self._backbone_is_train = is_train
+
+        if self._parallel_mode in (ParallelMode.SEMI_AUTO_PARALLEL, ParallelMode.AUTO_PARALLEL):
+            self.generator.set_auto_parallel()
+            self.discriminator.set_auto_parallel()
+
+        return dataset_helper, None
