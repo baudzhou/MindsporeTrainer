@@ -168,7 +168,7 @@ def get_pred_fn(task, model, data, output_dir, name, prefix='final', sequence=Fa
         return result
     return run_predict
 
-class DistributedTrainer:
+class DistributedTrainerForGAN:
     def __init__(self, args, task: Task, **kwargs):
         """
         data_fn return tuples (training_dataset, training_steps, train_sampler, batch_scheduler), training_dataset is required
@@ -211,7 +211,8 @@ class DistributedTrainer:
     def init_task(self):
         label_list = self.task.get_labels()
         self.model = self.task.get_model()
-        logger.info(f'Total parameters: {sum([p.size for p in self.model.get_parameters()])}')
+        logger.info(f'Total parameters: {sum([p.size for p in self.model[0].get_parameters()])}')
+        logger.info(f'Total parameters: {sum([p.size for p in self.model[1].get_parameters()])}')
 
         self.test_data = None
         logger.info(f"    Evaluation batch size = {self.args.eval_batch_size}")
@@ -249,7 +250,7 @@ class DistributedTrainer:
                 _keep_bn_fp32 = True
             self.model = [amp_util.build_train_network(m, self.loss_fn, level=self.args.amp_level, keep_batchnorm_fp32=_keep_bn_fp32) for m in self.model]
         else:
-            self.model = [NetworkWithLoss(m, self.loss_fn, return_all=True) for m in self.model]
+            self.model = [NetworkWithLoss(m, l, return_all=True) for m, l in zip(self.model, self.loss_fn)]
 
         if self.args.do_eval:
             metrics = self.task.get_metrics()
@@ -261,13 +262,14 @@ class DistributedTrainer:
             metrics = None
 
         if self.args.do_train:
-            opt_gen = self.optimizer_fn(self.args, self.model[0], opt_name=self.task.optimizer_name, model='gen')
-            opt_dis = self.optimizer_fn(self.args, self.model[1], opt_name=self.task.optimizer_name, model='gen')
+            opt_gen = self.optimizer_fn(self.args, self.model[0], opt_name=self.task.optimizer_name, mode='gen')
+            opt_dis = self.optimizer_fn(self.args, self.model[1], opt_name=self.task.optimizer_name, mode='dis')
             self.optimizer = [opt_gen, opt_dis]
             if self.args.enable_save_ckpt == "true" and self.args.rank % min(8, self.args.device_num) == 0:
+                    prefix = self.args.task_name.replace('.py', '').split(os.path.sep)[-1]
                     config_ck = CheckpointConfig(save_checkpoint_steps=self.args.save_eval_steps,
                                                 keep_checkpoint_max=self.args.save_checkpoint_num)
-                    ckpoint_cb = ModelCheckpointWithBest(self.trainer_state, prefix=self.args.task_name,
+                    ckpoint_cb = ModelCheckpointWithBest(self.trainer_state, prefix=prefix,
                                                         directory=self.args.output_dir, config=config_ck)
                     callbacks.append(ckpoint_cb)
             self.initialized = False
