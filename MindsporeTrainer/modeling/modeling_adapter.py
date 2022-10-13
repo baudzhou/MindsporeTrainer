@@ -24,6 +24,8 @@ from mindspore.parallel._utils import (_get_device_num, _get_gradients_mean,
 from mindspore import context
 import mindspore as ms
 
+from MindsporeTrainer.optims.utils import LossCallBack
+
 # from wywLM.optims.utils import LossCallBack
 from .models import BertModel
 from . import msops
@@ -32,6 +34,15 @@ GRADIENT_CLIP_TYPE = 1
 GRADIENT_CLIP_VALUE = 1.0
 
 clip_grad = C.MultitypeFuncGraph("clip_grad")
+
+
+class LossCell(nn.Cell):
+    def __init__(self, net_with_loss):
+        super().__init__()
+        self.net_with_loss = net_with_loss
+    
+    def construct(self, *inputs, **kwargs):
+        return self.net_with_loss(*inputs, **kwargs)[0]
 
 
 @clip_grad.register("Number", "Number", "Tensor")
@@ -193,6 +204,7 @@ class TrainOneStepCellGAN(nn.Cell):
         super().__init__()
         self.optimizer = optimizer
         self.net = net
+        self.net_loss = LossCell(net)
         self.grad = ms.ops.GradOperation(get_by_list=True, sens_param=True)
         if hasattr(net, 'output_map'):
             self.output_map = getattr(net, 'output_map') 
@@ -217,8 +229,8 @@ class TrainOneStepCellGAN(nn.Cell):
     def construct(self, *inputs):
         weights = self.weights
         loss_out = self.net(*inputs)
-        sens = tuple([P.Fill()(P.DType()(loss), P.Shape()(loss), self.sens) for loss in loss_out])
-        grads = self.grad(self.net, weights)(*inputs, sens)
+        sens = P.Fill()(P.DType()(loss_out[0]), P.Shape()(loss_out[0]), self.sens)
+        grads = self.grad(self.net_loss, weights)(*inputs, sens)
         if self.reducer_flag:
             grads = self.grad_reducer(grads)
         loss = F.depend(loss_out[0], self.optimizer(grads))
