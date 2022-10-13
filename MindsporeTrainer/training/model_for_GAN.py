@@ -81,12 +81,26 @@ class TrainerModel(Model):
 
                 cb_params.train_dataset_element = next_element
                 list_callback.step_begin(run_context)
+                gen_pred = None
                 if (cb_params.cur_step_num + 1) % (self.gen_update_steps + 1) == 0:
+                    self.generator.backbone.generator.set_train(True)
+                    self.generator.backbone.discriminator.set_train(False)
                     gen_output = self.generator(*next_element)
                     cb_params.gen_output = gen_output
+                    cb_params.net_outputs = gen_output
+                    cb_params.generator_output_map = self.generator.output_map
+                    if self.generator.output_map is None:
+                        gen_pred = gen_output[-1]
+                    else:
+                        for out, name in zip(gen_output, self.generator.output_map):
+                            if name == 'gen_pred':
+                                gen_pred = out
+                                break
                 if (cb_params.cur_step_num + 1) % (self.dis_update_steps + 1) == 0:
-                    dis_output = self.discriminator(*next_element)
+                    self.discriminator.set_train(False)
+                    dis_output = self.discriminator(*(next_element + [gen_pred]))
                     cb_params.dis_output = dis_output
+                    cb_params.discriminator_output_map = self.discriminator.output_map
                 # outputs = self._train_network(*next_element)
                 # cb_params.net_outputs = outputs
                 # if self._loss_scale_manager and self._loss_scale_manager.get_drop_overflow_update():
@@ -150,6 +164,7 @@ class TrainerModel(Model):
         cb_params = _InternalCallbackParam()
         cb_params.generator = self.generator
         cb_params.discriminator = self.discriminator
+        cb_params.train_network = self.generator
 
         cb_params.epoch_num = epoch - initial_epoch
         if dataset_sink_mode and sink_size > 0:

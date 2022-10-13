@@ -88,7 +88,10 @@ class NetworkWithLoss(nn.Cell):
             total_loss = self.loss_fn(*(prediction_scores + (sample[1],)))
         else:
             total_loss = self.loss_fn(*(sample + prediction_scores))
-        total_loss = F.cast(total_loss, mstype.float32)
+        # if isinstance(total_loss, dict):
+        #     total_loss = {k: F.cast(v, mstype.float32) for k, v in total_loss.items()}
+        # else:
+        #     total_loss = F.cast(total_loss, mstype.float32)
         return total_loss
 
 
@@ -148,12 +151,17 @@ class TrainOneStepCell(nn.TrainOneStepCell):
         enable_clip_grad (boolean): If True, clip gradients in BertTrainOneStepCell. Default: True.
     """
 
-    def __init__(self, network, optimizer, sens=1.0, enable_clip_grad=False):
+    def __init__(self, network, optimizer, output_map=None, sens=1.0, enable_clip_grad=False):
         super(TrainOneStepCell, self).__init__(network, optimizer, sens)
         # self.cast = P.Cast()
+        if hasattr(network, 'output_map'):
+            self.output_map = getattr(network, 'output_map') 
+        else:
+            self.output_map = None
         self.hyper_map = C.HyperMap()
         self.enable_clip_grad = enable_clip_grad
         self.enable_tuple_broaden = True
+        self.output_map = output_map
 
     def set_sens(self, value):
         self.sens = value
@@ -166,8 +174,8 @@ class TrainOneStepCell(nn.TrainOneStepCell):
     def construct(self, *args):
         """Defines the computation performed."""
         # weights = self.weights
-
-        loss = self.network(*args)
+        net_out = self.network(*args)
+        loss = net_out[0]
         sens = F.fill(loss.dtype, loss.shape, self.sens)
         grads = self.grad(self.network, self.weights)(*args,sens)
         if self.enable_clip_grad:
@@ -175,19 +183,21 @@ class TrainOneStepCell(nn.TrainOneStepCell):
         grads = self.grad_reducer(grads)
         # self.optimizer(grads)
         loss = F.depend(loss, self.optimizer(grads))
-        return loss
+        return net_out
 
 
 class TrainOneStepCellGAN(nn.Cell):
     """Encapsulation class of AttGAN generator network training."""
 
-    def __init__(self, net, optimizer, loss, sens=1.0):
+    def __init__(self, net, optimizer, sens=1.0):
         super().__init__()
         self.optimizer = optimizer
         self.net = net
-        self.loss = loss
         self.grad = ms.ops.GradOperation(get_by_list=True, sens_param=True)
-
+        if hasattr(net, 'output_map'):
+            self.output_map = getattr(net, 'output_map') 
+        else:
+            self.output_map = None
         self.sens = sens
         self.weights = optimizer.parameters
         # self.network = GenWithLossCell(generator)
@@ -206,15 +216,13 @@ class TrainOneStepCellGAN(nn.Cell):
 
     def construct(self, *inputs):
         weights = self.weights
-        outputs = self.net(*inputs)
-        loss_dict = self.loss(inputs + outputs)
-        loss = loss_dict['loss']
-        sens = P.Fill()(P.DType()(loss), P.Shape()(loss), self.sens)
-        grads = self.grad(self.network, weights)(*inputs, sens)
+        loss_out = self.net(*inputs)
+        sens = tuple([P.Fill()(P.DType()(loss), P.Shape()(loss), self.sens) for loss in loss_out])
+        grads = self.grad(self.net, weights)(*inputs, sens)
         if self.reducer_flag:
             grads = self.grad_reducer(grads)
-        loss_dict['loss'] = F.depend(loss, self.optimizer(grads))
-        return loss_dict
+        loss = F.depend(loss_out[0], self.optimizer(grads))
+        return loss_out
 
 
 grad_scale = C.MultitypeFuncGraph("grad_scale")
@@ -769,10 +777,13 @@ class AllGather(nn.Cell):
 
 
 def model_adapter(model, optimizer, scale_update_cell=None, accumulation_steps=1, 
-                    enable_global_norm=False, opt_overflow=False, gpu_target=False):
+                  GAN=False):
     if accumulation_steps <= 1:
         if scale_update_cell is None:
-            network = TrainOneStepCell(model, optimizer).set_train()
+            if GAN:
+                network = TrainOneStepCellGAN(model, optimizer).set_train()
+            else:
+                network = TrainOneStepCell(model, optimizer).set_train()
         else:
             network = TrainOneStepWithLossScaleCell(model, optimizer=optimizer, 
                                                     scale_update_cell=scale_update_cell).set_train()
