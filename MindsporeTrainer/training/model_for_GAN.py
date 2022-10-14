@@ -28,6 +28,11 @@ def set_random_seed(seed):
     set_seed(seed)
 
 
+def requires_grad(model, flag=True):
+    for p in model.get_parameters():
+        p.requires_grad = flag
+
+
 class TrainerModel(Model):
     def __init__(self, network, loss_fn=None, optimizer=None, metrics=None, eval_network=None, eval_indexes=None, amp_level="O0", boost_level="O0",
                  gen_update_steps=1, dis_update_steps=1,**kwargs):
@@ -82,9 +87,11 @@ class TrainerModel(Model):
                 cb_params.train_dataset_element = next_element
                 list_callback.step_begin(run_context)
                 gen_pred = None
-                if (cb_params.cur_step_num + 1) % (self.gen_update_steps + 1) == 0:
-                    self.generator.net.backbone.generator.set_train(True)
-                    self.generator.net.backbone.discriminator.set_train(False)
+                if (cb_params.cur_step_num + 1) % (self.gen_update_steps) == 0:
+                    requires_grad(self.generator.net.backbone.generator, True)
+                    requires_grad(self.generator.net.backbone.discriminator, False)
+                    # self.generator.net.backbone.generator.set_train(True)
+                    # self.generator.net.backbone.discriminator.set_train(False)
                     gen_output = self.generator(*next_element)
                     cb_params.gen_output = gen_output
                     cb_params.net_outputs = gen_output
@@ -96,9 +103,9 @@ class TrainerModel(Model):
                             if name == 'gen_pred':
                                 gen_pred = out
                                 break
-                if (cb_params.cur_step_num + 1) % (self.dis_update_steps + 1) == 0:
-                    self.generator.net.backbone.generator.set_train(False)
-                    self.discriminator.net.backbone.discriminator.set_train(True)
+                if (cb_params.cur_step_num + 1) % (self.dis_update_steps) == 0:
+                    requires_grad(self.generator.net.backbone.generator, False)
+                    requires_grad(self.generator.net.backbone.discriminator, True)
                     dis_output = self.discriminator(*(next_element + [gen_pred]))
                     cb_params.dis_output = dis_output
                     cb_params.discriminator_output_map = self.discriminator.output_map
