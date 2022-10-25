@@ -1224,8 +1224,8 @@ class GetMaskedLMOutput(nn.Cell):
         logits = self.matmul(input_tensor, output_weights)
         logits = self.cast(logits, self.dtype)
         logits = logits + self.bias
-        log_probs = self.log_softmax(logits)
-        return log_probs
+        # log_probs = self.log_softmax(logits)
+        return logits
 
 
 class GetNextSentenceOutput(nn.Cell):

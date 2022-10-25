@@ -10,7 +10,7 @@ import psutil
 import signal
 import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-os.environ['GLOG_v'] = '3'
+# os.environ['GLOG_v'] = '1'
 import argparse
 import random
 import numpy as np

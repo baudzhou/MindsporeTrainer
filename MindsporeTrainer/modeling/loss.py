@@ -19,6 +19,7 @@ from mindspore.ops import composite as C
 import mindspore.ops as O
 from mindspore.common.tensor import Tensor
 from mindspore.common.parameter import Parameter
+from mindspore.nn.transformer import CrossEntropyLoss
 from MindsporeTrainer.utils.checkpoint import load_ckpt
 
 
@@ -80,6 +81,7 @@ class BertPretrainingLoss(nn.Cell):
         self.last_idx = (-1,)
         self.neg = P.Neg()
         self.cast = P.Cast()
+        self.loss_fn = CrossEntropyLoss()
 
     def construct(self, *sample):
         """Defines the computation performed.
@@ -92,24 +94,29 @@ class BertPretrainingLoss(nn.Cell):
         prediction_scores = sample[7]
         next_sentence_labels = sample[3]
         seq_relationship_score = sample[8]
-        label_ids = self.reshape(masked_lm_ids, self.last_idx)
-        label_weights = self.cast(self.reshape(masked_lm_weights, self.last_idx), mstype.float32)
-        one_hot_labels = self.onehot(label_ids, self.vocab_size, self.on_value, self.off_value)
+        
+        mask = F.cast(O.ones_like(masked_lm_ids), mstype.float32)
+        masked_lm_loss = self.loss_fn(prediction_scores, masked_lm_ids.reshape((-1,)), mask.reshape((-1,)))
 
-        per_example_loss = self.neg(self.reduce_sum(prediction_scores * one_hot_labels, self.last_idx))
-        numerator = self.reduce_sum(label_weights * per_example_loss, ())
-        denominator = self.reduce_sum(label_weights, ()) + self.cast(F.tuple_to_array((1e-5,)), mstype.float32)
-        masked_lm_loss = numerator / denominator
+        # label_ids = self.reshape(masked_lm_ids, self.last_idx)
+        # # label_weights = self.cast(self.reshape(masked_lm_weights, self.last_idx), mstype.float32)
+        # one_hot_labels = self.onehot(label_ids, self.vocab_size, self.on_value, self.off_value)
+        # self.reduce_sum(prediction_scores * one_hot_labels, self.last_idx)
+
+        # per_example_loss = self.neg(self.reduce_sum(prediction_scores * one_hot_labels, self.last_idx))
+        # numerator = self.reduce_sum(label_weights * per_example_loss, ())
+        # denominator = self.reduce_sum(label_weights, ()) + self.cast(F.tuple_to_array((1e-5,)), mstype.float32)
+        # masked_lm_loss = numerator / denominator
 
         # next_sentence_loss
-        labels = self.reshape(next_sentence_labels, self.last_idx)
-        if labels.max() >= 0:
-            one_hot_labels = self.onehot(labels, 2, self.on_value, self.off_value)
-            per_example_loss = self.neg(self.reduce_sum(
-                one_hot_labels * seq_relationship_score, self.last_idx))
-            next_sentence_loss = self.reduce_mean(per_example_loss, self.last_idx)
-        else:
-            next_sentence_loss = Tensor(0.0, dtype=mstype.float32)
+        # labels = self.reshape(next_sentence_labels, self.last_idx)
+        # if labels.max() >= 0:
+        #     one_hot_labels = self.onehot(labels, 2, self.on_value, self.off_value)
+        #     per_example_loss = self.neg(self.reduce_sum(
+        #         one_hot_labels * seq_relationship_score, self.last_idx))
+        #     next_sentence_loss = self.reduce_mean(per_example_loss, self.last_idx)
+        # else:
+        next_sentence_loss = Tensor(0.0, dtype=mstype.float32)
 
         # total_loss
         total_loss = masked_lm_loss + next_sentence_loss
