@@ -6,6 +6,7 @@
 # ============================================================================
 
 from ast import Not
+from statistics import mean
 import time, os
 import glob
 
@@ -215,8 +216,10 @@ class StateCallback(Callback):
         # if self._per_print_times != 0 and (cb_params.cur_step_num - self._last_print_time) >= self._per_print_times:
         #     self._last_print_time = cb_params.cur_step_num
             # print("epoch: %s step: %s, loss is %s" % (cb_params.cur_epoch_num, cur_step_in_epoch, loss), flush=True)
-
-        lrs = get_lr(self.optimizer)
+        if isinstance(self.optimizer, list):
+            lrs = sum([get_lr(opt) for opt in self.optimizer]) / len(self.optimizer)
+        else:
+            lrs = get_lr(self.optimizer)
         if not isinstance(lrs, tuple):
             lrs = (lrs, )
         lr = sum(lrs).asnumpy() / len(lrs)
@@ -271,7 +274,7 @@ class ModelCheckpointWithBest(ModelCheckpoint):
             for pb in pre_best:
                 if os.path.exists(pb):
                     os.remove(pb)
-            ckpt_path = os.path.join(self._directory, f'best_{self.best_metric}.ckpt')
+            ckpt_path = f'best_{self.best_metric}.ckpt'
             self._save(cb_params, ckpt_path)
 
     def _save_ckpt(self, cb_params, force_to_save=False):
@@ -326,6 +329,28 @@ class ModelCheckpointWithBest(ModelCheckpoint):
         self._latest_ckpt_file_name = cur_file
 
 
+class ModelCheckpointWithBestGAN(ModelCheckpointWithBest):
+    def _save(self, cb_params, cur_ckpoint_file):
+        cur_gen_file = os.path.join(self._directory, 'generator_' + cur_ckpoint_file)
+        cur_dis_file = os.path.join(self._directory, 'dicriminator_' + cur_ckpoint_file)
+        self._last_time_for_keep = time.time()
+        self._last_triggered_step = cb_params.cur_step_num
+
+        if context.get_context("enable_ge"):
+            _set_cur_net(cb_params.train_network)
+            cb_params.train_network.exec_checkpoint_graph()
+        if "epoch_num" in self._append_dict:
+            self._append_dict["epoch_num"] = self._append_epoch_num + cb_params.cur_epoch_num
+        if "step_num" in self._append_dict:
+            self._append_dict["step_num"] = self._append_step_num + cb_params.cur_step_num
+        # network = self._config.saved_network if self._config.saved_network is not None else cb_params.train_network
+        save_checkpoint(cb_params.generator, cur_gen_file, self._config.integrated_save, self._config.async_save,
+                        self._append_dict, self._config.enc_key, self._config.enc_mode)
+        save_checkpoint(cb_params.discriminator, cur_dis_file, self._config.integrated_save, self._config.async_save,
+                        self._append_dict, self._config.enc_key, self._config.enc_mode)
+        self._latest_ckpt_file_name = [cur_gen_file, cur_dis_file]
+
+
 class EvalResultsCallback(Callback):
     """
         Get results of evaluation steps
@@ -347,7 +372,7 @@ class EvalResultsCallback(Callback):
         else:
             self.allgather = None
 
-    def step_end(self, run_context):
+    def on_eval_step_end(self, run_context):
         loss, net_output, label = run_context.original_args().net_outputs
         # if self.allgather is not None:
         #     label = self.allgather(label)

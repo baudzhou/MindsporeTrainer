@@ -25,7 +25,7 @@ from MindsporeTrainer.optims import get_optimizer
 from MindsporeTrainer.optims.adam import *
 from MindsporeTrainer.modeling.modeling_adapter import *
 from MindsporeTrainer.task import Task
-from MindsporeTrainer.utils.callbacks import EvalCallBack, StateCallback, ModelCheckpointWithBest
+from MindsporeTrainer.utils.callbacks import EvalCallBack, ModelCheckpointWithBestGAN, StateCallback, ModelCheckpointWithBest
 from MindsporeTrainer.utils.checkpoint import load_ckpt
 from MindsporeTrainer.training.model_for_GAN import TrainerModel
 
@@ -269,7 +269,7 @@ class DistributedTrainerForGAN:
                     prefix = self.args.task_name.replace('.py', '').split(os.path.sep)[-1]
                     config_ck = CheckpointConfig(save_checkpoint_steps=self.args.save_eval_steps,
                                                 keep_checkpoint_max=self.args.save_checkpoint_num)
-                    ckpoint_cb = ModelCheckpointWithBest(self.trainer_state, prefix=prefix,
+                    ckpoint_cb = ModelCheckpointWithBestGAN(self.trainer_state, prefix=prefix,
                                                         directory=self.args.output_dir, config=config_ck)
                     callbacks.append(ckpoint_cb)
             self.initialized = False
@@ -285,13 +285,11 @@ class DistributedTrainerForGAN:
             network_gen = model_adapter(self.model[0], optimizer=self.optimizer[0],
                                     scale_update_cell=update_cell,
                                     accumulation_steps=accumulation_steps,
-                                    enable_global_norm=enable_global_norm,
-                                    gpu_target=self.args.device_target=='GPU')
+                                    GAN=True)
             network_dis = model_adapter(self.model[1], optimizer=self.optimizer[1],
                                     scale_update_cell=update_cell,
                                     accumulation_steps=accumulation_steps,
-                                    enable_global_norm=enable_global_norm,
-                                    gpu_target=self.args.device_target=='GPU')
+                                    GAN=True)
             network = [network_gen, network_dis]
             summary_dir = os.path.join(self.output_dir, 'tblogger', str(self.args.rank))
             callbacks.append(StateCallback(self.trainer_state, self.optimizer, 
