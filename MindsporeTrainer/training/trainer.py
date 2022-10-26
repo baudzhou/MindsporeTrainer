@@ -280,9 +280,7 @@ class DistributedTrainer:
             enable_global_norm = self.args.enable_global_norm
             network = model_adapter(self.model, optimizer=self.optimizer,
                                     scale_update_cell=update_cell,
-                                    accumulation_steps=accumulation_steps,
-                                    enable_global_norm=enable_global_norm,
-                                    gpu_target=self.args.device_target=='GPU')
+                                    accumulation_steps=accumulation_steps)
 
             summary_dir = os.path.join(self.output_dir, 'tblogger', str(self.args.rank))
             callbacks.append(StateCallback(self.trainer_state, self.optimizer, 
@@ -311,13 +309,15 @@ class DistributedTrainer:
             cb = self.task.get_callbacks()
             if cb is not None:
                 callbacks.append(cb)
+            from mindspore.profiler import Profiler
+            pf = Profiler()
             model.train(self.args.num_train_epochs, 
                         self.train_data, 
                         callbacks=callbacks, 
                         dataset_sink_mode=self.args.enable_data_sink,
                         sink_size=self.args.data_sink_steps
                         )
-
+            pf.analyse()
         elif self.args.do_predict:
             self.model = ModelForEval(self.model, self.eval_head)
             if len(self.args.load_checkpoint_path) > 0:

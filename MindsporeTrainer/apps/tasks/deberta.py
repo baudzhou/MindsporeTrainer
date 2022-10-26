@@ -36,8 +36,10 @@ class DEBERTATask(TransformerTask):
         self.tokenizer = BertTokenizer(self.vocab_path)
 
     def train_data(self, **kwargs):
-        data_path = os.path.join(self.data_dir, 'daizhige.pkl')
-        data = self.load_data(data_path)
+        # data_path = os.path.join(self.data_dir, 'daizhige.pkl')
+        # data = self.load_data(data_path)
+        data_path = os.path.join(self.data_dir, 'eval.txt')
+        data = self.load_txt_data(data_path)
         # data = ExampleSet(data)
         output_columns = ["input_ids", "input_mask", "token_type_id", "next_sentence_labels",
                                     "masked_lm_positions", "masked_lm_ids", "masked_lm_weights"]
